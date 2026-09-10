@@ -146,7 +146,74 @@ export function KeysManager({ initialKeys }: { initialKeys: KeyRow[] }) {
         ) : null}
       </form>
 
-      <div className="mc-card overflow-hidden">
+      {/* Mobile cards (below sm) */}
+      <div className="space-y-3 sm:hidden">
+        {initialKeys.length === 0 ? (
+          <div className="mc-card px-4 py-8 text-center text-sm text-ink-500">
+            No keys minted yet.
+          </div>
+        ) : (
+          initialKeys.map((k) => (
+            <div key={k.id} className="mc-card space-y-3 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-mono text-xs text-ink-200">
+                    {k.agentId}
+                  </div>
+                  {k.label ? (
+                    <div className="mt-0.5 truncate text-xs text-ink-500">
+                      {k.label}
+                    </div>
+                  ) : null}
+                </div>
+                <div>
+                  {k.revokedAt ? (
+                    <span className="mc-pill bg-rose-500/10 text-rose-200 ring-rose-500/30">
+                      revoked
+                    </span>
+                  ) : (
+                    <span className="mc-pill bg-emerald-500/10 text-emerald-200 ring-emerald-500/30">
+                      active
+                    </span>
+                  )}
+                </div>
+              </div>
+              <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                <div>
+                  <dt className="text-ink-500">Prefix</dt>
+                  <dd className="font-mono text-ink-300">{k.keyPrefix}</dd>
+                </div>
+                <div>
+                  <dt className="text-ink-500">Created</dt>
+                  <dd className="text-ink-300">
+                    {new Date(k.createdAt).toLocaleDateString()}
+                  </dd>
+                </div>
+                <div className="col-span-2">
+                  <dt className="text-ink-500">Last used</dt>
+                  <dd className="text-ink-300">
+                    {k.lastUsedAt
+                      ? new Date(k.lastUsedAt).toLocaleString()
+                      : "—"}
+                  </dd>
+                </div>
+              </dl>
+              {!k.revokedAt ? (
+                <button
+                  type="button"
+                  onClick={() => handleRevoke(k.id)}
+                  className="mc-button w-full text-rose-200 hover:bg-rose-500/10"
+                >
+                  Revoke
+                </button>
+              ) : null}
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Desktop table (sm and up) */}
+      <div className="mc-card hidden overflow-hidden sm:block">
         <table className="w-full text-sm">
           <thead className="bg-ink-950/60 text-xs uppercase tracking-wider text-ink-400">
             <tr>

@@ -170,6 +170,7 @@ export function LiveActivityFeed({ initialEvents, agents, streamUrl }: Props) {
   const [connection, setConnection] = useState<
     "connecting" | "open" | "closed"
   >("connecting");
+  const [hideHeartbeat, setHideHeartbeat] = useState<boolean>(false);
 
   // SSE connection
   useEffect(() => {
@@ -251,20 +252,42 @@ export function LiveActivityFeed({ initialEvents, agents, streamUrl }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [streamUrl]);
 
+  // Hydrate the heartbeat filter preference from localStorage.
+  // SSR-safe: defaults to false, then updates on mount (brief flash only).
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("mc:hide-heartbeat");
+      if (stored === "true") setHideHeartbeat(true);
+    } catch {
+      /* localStorage unavailable (private mode, etc.) */
+    }
+  }, []);
+
+  // Strip heartbeats from the buffer when the user has chosen to hide them.
+  const visibleBuffer = useMemo(
+    () =>
+      hideHeartbeat
+        ? buffer.filter((e) => e.type !== "heartbeat")
+        : buffer,
+    [buffer, hideHeartbeat],
+  );
+
   // Per-agent raw event counts (used in tab badges).
   const counts = useMemo(() => {
-    const c: Record<string, number> = { [ALL_TAB]: buffer.length };
-    for (const e of buffer) {
+    const c: Record<string, number> = { [ALL_TAB]: visibleBuffer.length };
+    for (const e of visibleBuffer) {
       c[e.agentId] = (c[e.agentId] ?? 0) + 1;
     }
     return c;
-  }, [buffer]);
+  }, [visibleBuffer]);
 
   // Filter by active tab, then aggregate consecutive same-type events.
   const filtered = useMemo(
     () =>
-      tab === ALL_TAB ? buffer : buffer.filter((e) => e.agentId === tab),
-    [buffer, tab],
+      tab === ALL_TAB
+        ? visibleBuffer
+        : visibleBuffer.filter((e) => e.agentId === tab),
+    [visibleBuffer, tab],
   );
 
   const aggregated = useMemo(
@@ -356,7 +379,38 @@ export function LiveActivityFeed({ initialEvents, agents, streamUrl }: Props) {
             </span>
           </span>
         </div>
-        {connectionBadge}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            aria-pressed={hideHeartbeat}
+            aria-label={hideHeartbeat ? "Show heartbeats" : "Hide heartbeats"}
+            title={
+              hideHeartbeat
+                ? "Heartbeats hidden — click to show"
+                : "Hide heartbeats"
+            }
+            onClick={() => {
+              const next = !hideHeartbeat;
+              setHideHeartbeat(next);
+              try {
+                localStorage.setItem("mc:hide-heartbeat", String(next));
+              } catch {
+                /* localStorage unavailable */
+              }
+            }}
+            className={`mc-pill transition-colors ${
+              hideHeartbeat
+                ? "bg-fuchsia-500/15 text-fuchsia-200 ring-fuchsia-500/40 hover:bg-fuchsia-500/25"
+                : "bg-ink-800/40 text-ink-400 ring-ink-700/30 hover:bg-ink-800/60 hover:text-ink-200"
+            }`}
+          >
+            <HeartbeatIcon className="h-3 w-3" />
+            <span className="hidden text-[10px] font-medium sm:inline">
+              {hideHeartbeat ? "hb off" : "hb"}
+            </span>
+          </button>
+          {connectionBadge}
+        </div>
       </div>
 
       {/* Aggregated list */}
@@ -438,7 +492,7 @@ export function LiveActivityFeed({ initialEvents, agents, streamUrl }: Props) {
                       </span>
                     ) : null}
                     {entry.count > 1 ? (
-                      <span className="hidden font-mono text-[10px] text-ink-600 sm:inline">
+                      <span className="font-mono text-[10px] text-ink-600">
                         {shortTime(entry.firstTimestamp)} →{" "}
                         {shortTime(entry.lastTimestamp)}
                       </span>
@@ -449,7 +503,7 @@ export function LiveActivityFeed({ initialEvents, agents, streamUrl }: Props) {
                   </p>
                 </div>
 
-                <span className="hidden shrink-0 font-mono text-[11px] text-ink-500 sm:inline">
+                <span className="shrink-0 font-mono text-[11px] text-ink-500">
                   {shortTime(entry.lastTimestamp)}
                 </span>
               </li>
