@@ -104,6 +104,11 @@ const EVENT_DOT: Record<EventType, string> = {
   waiting: "bg-fuchsia-400",
   heartbeat: "bg-ink-400",
   status_changed: "bg-amber-300",
+  message_received: "bg-sky-300",
+  message_sent: "bg-sky-500",
+  subagent_spawned: "bg-violet-400",
+  subagent_ended: "bg-violet-500",
+  cron_reconciled: "bg-purple-400",
 };
 
 export function eventDot(type: EventType | string): string {
