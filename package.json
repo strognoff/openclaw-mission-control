@@ -1,0 +1,28 @@
+{
+  "name": "openclaw-mission-control",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Live operations dashboard for OpenClaw agents — API + dashboard + plugin.",
+  "license": "MIT",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "lint": "npm run -ws --if-present lint",
+    "test": "npm run -ws --if-present test",
+    "build": "npm run -ws --if-present build",
+    "dev:api": "npm --workspace apps/api run dev",
+    "dev:dashboard": "npm --workspace apps/dashboard run dev",
+    "clean": "rm -rf apps/*/dist apps/*/.next packages/*/dist"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.4.5"
+  }
+}

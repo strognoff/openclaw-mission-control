@@ -1,0 +1,21 @@
+{
+  "name": "@openclaw-mc/eslint-config",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "index.cjs",
+  "exports": {
+    ".": "./index.cjs",
+    "./node": "./node.cjs",
+    "./browser": "./browser.cjs"
+  },
+  "dependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "eslint-config-prettier": "^9.1.0",
+    "globals": "^15.0.0"
+  },
+  "peerDependencies": {
+    "eslint": "^8.57.0"
+  }
+}

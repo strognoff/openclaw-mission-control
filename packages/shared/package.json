@@ -1,0 +1,34 @@
+{
+  "name": "@openclaw-mc/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "default": "./dist/types.js"
+    },
+    "./sanitise": {
+      "types": "./dist/sanitise.d.ts",
+      "default": "./dist/sanitise.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "lint": "eslint --config ../../eslint.config.cjs src --ext .ts"
+  },
+  "devDependencies": {
+    "@openclaw-mc/eslint-config": "*",
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
+  }
+}
