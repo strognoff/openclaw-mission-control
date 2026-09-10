@@ -1,31 +1,35 @@
 "use client";
 
 /**
- * LiveActivityFeed — client component that opens the SSE stream and renders
- * the most recent activity for one or all agents, with consecutive events of
- * the same type aggregated into a single row carrying a ×N count badge.
+ * LiveActivityFeed — client component that renders the most recent activity
+ * for one or all agents, with consecutive events of the same type aggregated
+ * into a single row carrying a ×N count badge.
+ *
+ * Live data is sourced from <LiveStreamProvider> via the useEvents /
+ * useAgents / useConnection hooks — the provider owns the single SSE
+ * connection, this component just renders. SSR is satisfied by the
+ * provider's initialAgents / initialEvents which come from the server.
  *
  * Behaviour:
- * - Server provides the initial 120 events so the page is meaningful before
- *   the first SSE message arrives.
- * - SSE messages patch the rolling buffer (capped at 500 raw events) in place.
- * - The displayed list is filtered by the active tab ("all" or a single
- *   agentId) and then aggregated: consecutive events with the same
- *   (agentId, type) collapse into one row, count increments on each new
- *   raw event of the same kind.
+ * - Events are filtered by the active tab ("all" or a single agentId),
+ *   then optionally by the heartbeat toggle, then aggregated.
  * - A maximum of MAX_DISPLAY rows is rendered.
- * - Failed connections retry with exponential backoff up to 30s.
+ * - New events (those not seen on the previous render) get a brief fade-in.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   Agent,
   AgentStatus,
   Event,
   EventType,
-  SseMessage,
 } from "@openclaw-mc/shared";
-import { eventDot, shortTime, statusColors, summarizeEvent } from "@/lib/format";
+import {
+  eventDot,
+  shortTime,
+  statusColors,
+  summarizeEvent,
+} from "@/lib/format";
 import {
   ActivityIcon,
   HeartbeatIcon,
@@ -38,11 +42,15 @@ import {
   WaitingIcon,
   AgentIcon,
 } from "@/components/icons";
+import {
+  useAgents,
+  useConnection,
+  useEvents,
+} from "@/components/LiveStreamProvider";
 
 interface Props {
-  initialEvents: Event[];
-  agents: Agent[];
-  streamUrl: string;
+  /** Optional buffer cap. Kept for API stability; provider owns the cap. */
+  maxBuffer?: number;
 }
 
 interface AggregatedEntry {
@@ -62,7 +70,6 @@ interface AggregatedEntry {
   fresh: boolean;
 }
 
-const MAX_BUFFER = 500;
 const MAX_DISPLAY = 10;
 const FRESH_FADE_MS = 700;
 
@@ -158,99 +165,17 @@ function aggregateEvents(
   return out.slice(0, max);
 }
 
-export function LiveActivityFeed({ initialEvents, agents, streamUrl }: Props) {
-  const [buffer, setBuffer] = useState<Event[]>(() =>
-    initialEvents.slice(0, MAX_BUFFER),
-  );
-  const [freshIds, setFreshIds] = useState<Set<string>>(() => new Set());
-  const [agentMap, setAgentMap] = useState<Map<string, Agent>>(
-    () => new Map(agents.map((a) => [a.id, a])),
-  );
+export function LiveActivityFeed({ maxBuffer: _maxBuffer = 500 }: Props = {}) {
+  // _maxBuffer kept for API stability; provider owns the actual cap.
+  void _maxBuffer;
+
+  const events = useEvents();
+  const agents = useAgents();
+  const connection = useConnection();
+
   const [tab, setTab] = useState<string>(ALL_TAB);
-  const [connection, setConnection] = useState<
-    "connecting" | "open" | "closed"
-  >("connecting");
   const [hideHeartbeat, setHideHeartbeat] = useState<boolean>(false);
-
-  // SSE connection
-  useEffect(() => {
-    let es: EventSource | null = null;
-    let retryMs = 1_000;
-    let cancelled = false;
-
-    function open() {
-      if (cancelled) return;
-      es = new EventSource(streamUrl);
-      setConnection("connecting");
-      es.addEventListener("hello", () => setConnection("open"));
-      es.addEventListener("open", () => setConnection("open"));
-      for (const evt of [
-        "event_added",
-        "agent_added",
-        "agent_updated",
-        "agent_removed",
-      ] as const) {
-        es.addEventListener(evt, (ev) => {
-          try {
-            const msg = JSON.parse((ev as MessageEvent).data) as SseMessage;
-            handleMessage(msg);
-          } catch {
-            /* ignore parse errors */
-          }
-        });
-      }
-      es.addEventListener("error", () => {
-        es?.close();
-        es = null;
-        setConnection("closed");
-        const wait = Math.min(retryMs, 30_000);
-        retryMs = Math.min(retryMs * 2, 30_000);
-        setTimeout(() => {
-          if (!cancelled) open();
-        }, wait);
-      });
-    }
-
-    function handleMessage(msg: SseMessage) {
-      if (msg.type === "event_added") {
-        const eid = msg.event.id;
-        setBuffer((prev) => [msg.event, ...prev].slice(0, MAX_BUFFER));
-        setFreshIds((prev) => {
-          if (prev.has(eid)) return prev;
-          const next = new Set(prev);
-          next.add(eid);
-          return next;
-        });
-        setTimeout(() => {
-          setFreshIds((prev) => {
-            if (!prev.has(eid)) return prev;
-            const next = new Set(prev);
-            next.delete(eid);
-            return next;
-          });
-        }, FRESH_FADE_MS);
-      } else if (msg.type === "agent_added" || msg.type === "agent_updated") {
-        setAgentMap((prev) => {
-          const next = new Map(prev);
-          next.set(msg.agent.id, msg.agent);
-          return next;
-        });
-      } else if (msg.type === "agent_removed") {
-        setAgentMap((prev) => {
-          const next = new Map(prev);
-          next.delete(msg.agentId);
-          return next;
-        });
-      }
-    }
-
-    open();
-    return () => {
-      cancelled = true;
-      es?.close();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [streamUrl]);
+  const [freshIds, setFreshIds] = useState<Set<string>>(() => new Set());
 
   // Hydrate the heartbeat filter preference from localStorage.
   // SSR-safe: defaults to false, then updates on mount (brief flash only).
@@ -263,13 +188,53 @@ export function LiveActivityFeed({ initialEvents, agents, streamUrl }: Props) {
     }
   }, []);
 
-  // Strip heartbeats from the buffer when the user has chosen to hide them.
+  // Track which event ids we've already announced as fresh.
+  // When new ids appear in `events`, mark them fresh for FRESH_FADE_MS.
+  const seenIdsRef = useRef<Set<string>>(new Set(events.map((e) => e.id)));
+
+  useEffect(() => {
+    const newIds: string[] = [];
+    for (const e of events) {
+      if (!seenIdsRef.current.has(e.id)) {
+        newIds.push(e.id);
+        seenIdsRef.current.add(e.id);
+      }
+    }
+    if (newIds.length === 0) return;
+
+    setFreshIds((prev) => {
+      const next = new Set(prev);
+      for (const id of newIds) next.add(id);
+      return next;
+    });
+
+    const timeouts = newIds.map((id) =>
+      setTimeout(() => {
+        setFreshIds((prev) => {
+          if (!prev.has(id)) return prev;
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }, FRESH_FADE_MS),
+    );
+
+    return () => {
+      for (const t of timeouts) clearTimeout(t);
+    };
+  }, [events]);
+
+  // Build a quick lookup from agents for the aggregator.
+  const agentMap = useMemo(
+    () => new Map(agents.map((a) => [a.id, a])),
+    [agents],
+  );
+
+  // Strip heartbeats when the user has chosen to hide them.
   const visibleBuffer = useMemo(
     () =>
-      hideHeartbeat
-        ? buffer.filter((e) => e.type !== "heartbeat")
-        : buffer,
-    [buffer, hideHeartbeat],
+      hideHeartbeat ? events.filter((e) => e.type !== "heartbeat") : events,
+    [events, hideHeartbeat],
   );
 
   // Per-agent raw event counts (used in tab badges).
