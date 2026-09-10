@@ -80,8 +80,28 @@ export async function listKeys(): Promise<{
   return call(`/v1/agents/admin/keys`);
 }
 
-/** Build the SSE URL the browser EventSource will subscribe to. */
+/**
+ * Build the SSE URL the browser EventSource will subscribe to.
+ *
+ * IMPORTANT: the dashboard page is served over HTTPS at menuboard.online.
+ * Browser EventSource connections from an HTTPS page to an HTTP URL are
+ * blocked by the mixed-content security policy, so the SSE URL MUST be
+ * the public HTTPS one. NEXT_PUBLIC_MC_API_URL is inlined at build time
+ * by Next.js and is the browser-safe value; MC_API_URL is server-only
+ * (localhost) and only useful for SSR fetches via `getApiConfig()`.
+ */
 export function liveStreamUrl(): string {
-  const { url, adminKey } = getApiConfig();
+  const url = (
+    process.env.NEXT_PUBLIC_MC_API_URL ||
+    process.env.MC_API_URL ||
+    "http://127.0.0.1:8787/v1/agents"
+  ).replace(/\/+$/, "");
+  const adminKey =
+    process.env.NEXT_PUBLIC_MC_ADMIN_KEY ||
+    process.env.MC_ADMIN_KEY ||
+    "";
+  if (!adminKey) {
+    throw new Error("MC_ADMIN_KEY is not set");
+  }
   return `${url}/v1/agents/events/stream?token=${encodeURIComponent(adminKey)}`;
 }
