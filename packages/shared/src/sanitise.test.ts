@@ -110,10 +110,10 @@ describe("sanitise", () => {
 
   it("redacts inside arrays when their elements contain sensitive content", () => {
     const out = sanitise({
-      messages: ["hello", { prompt: "secret", content: "ok" }],
+      messages: ["hello", { prompt: "secret", note: "ok" }],
     }) as Record<string, unknown>;
     expect(out).toEqual({
-      messages: ["hello", { prompt: "[redacted]", content: "ok" }],
+      messages: ["hello", { prompt: "[redacted]", note: "ok" }],
     });
   });
 

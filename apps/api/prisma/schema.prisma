@@ -1,0 +1,92 @@
+// OpenClaw Mission Control — Prisma schema.
+//
+// Database: SQLite (file:./dev.db). The file is gitignored; the schema is
+// committed so `prisma generate` and `prisma migrate diff` reproduce.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("MC_DATABASE_URL")
+}
+
+model Agent {
+  id              String   @id
+  name            String
+  hostname        String
+  platform        String
+  openclawVersion String
+  currentStatus   String   @default("IDLE")
+  currentTask     String?
+  currentActivity String?
+  currentTool     String?
+  provider        String?
+  model           String?
+  lastHeartbeat   DateTime @default(now())
+  lastSeen        DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  apiKeys  ApiKey[]
+  events   Event[]
+  runs     Run[]
+
+  @@index([lastHeartbeat])
+  @@index([currentStatus])
+}
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  agentId    String
+  agent      Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  keyHash    String
+  keyPrefix  String
+  label      String?
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+
+  @@index([agentId])
+  @@index([keyPrefix])
+}
+
+model Run {
+  id            String    @id
+  agentId       String
+  agent         Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  sessionId     String?
+  task          String?
+  status        String
+  provider      String?
+  model         String?
+  startedAt     DateTime  @default(now())
+  completedAt   DateTime?
+  durationMs    Int?
+  toolCallCount Int       @default(0)
+  errorSummary  String?
+
+  events Event[]
+
+  @@index([agentId, startedAt])
+  @@index([status])
+}
+
+model Event {
+  id        String   @id @default(cuid())
+  agentId   String
+  agent     Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  runId     String?
+  run       Run?     @relation(fields: [runId], references: [id], onDelete: SetNull)
+  type      String
+  status    String?
+  activity  String?
+  tool      String?
+  timestamp DateTime @default(now())
+  metadata  String?  // JSON-encoded; SQLite has no native JSON columns.
+
+  @@index([agentId, timestamp])
+  @@index([runId, timestamp])
+  @@index([type])
+}

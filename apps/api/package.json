@@ -1,0 +1,37 @@
+{
+  "name": "@openclaw-mc/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Mission Control REST + SSE API. Fastify + Prisma + SQLite.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "prisma generate && tsc -p tsconfig.json",
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "lint": "eslint --config ../../eslint.config.cjs src --ext .ts",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev --name init --skip-seed"
+  },
+  "dependencies": {
+    "@fastify/cors": "^9.0.1",
+    "@openclaw-mc/shared": "*",
+    "@prisma/client": "^5.15.0",
+    "bcrypt": "^5.1.1",
+    "dotenv": "^16.4.5",
+    "fastify": "^4.27.0",
+    "fastify-plugin": "^4.5.1",
+    "pino-pretty": "^11.2.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@openclaw-mc/eslint-config": "*",
+    "@types/bcrypt": "^5.0.2",
+    "@types/node": "^20.11.0",
+    "prisma": "^5.15.0",
+    "tsx": "^4.11.0",
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
+  }
+}

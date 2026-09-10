@@ -22,18 +22,19 @@
 const STRING_FIELD_MAX = 200;
 
 export const SENSITIVE_KEY_PATTERNS: readonly RegExp[] = [
-  /prompt/i,
-  /response/i,
-  /authorization/i,
-  /cookie/i,
-  /token/i,
-  /password/i,
-  /secret/i,
-  /\bkey\b/i,
-  /output/i,
-  /^env$/i,
-  /body/i,
-  /headers?$/i,
+  /(^|_)(prompt|prompts)($|_)/i,
+  /(^|_)(response|responses)($|_)/i,
+  /(authorization|auth[_-]?token)/i,
+  /(^|_)(cookie|cookies)($|_)/i,
+  /(access[_-]?token|api[_-]?key|bearer|secret[_-]?key|session[_-]?id)/i,
+  /(^|_)(token|tokens)($|_)/i,
+  /(password|passwd|pwd)/i,
+  /(secret|secrets|credential|credentials)/i,
+  /(^|_)(api[_-]?key|key|keys)($|_)/i,
+  /(^|_)(output|outputs|stdout|stderr)($|_)/i,
+  /(environment|^env$|envvars|env_)/i,
+  /(body|html|markdown|text|content)/i,
+  /(headers?|request[_-]?headers?|response[_-]?headers?)/i,
 ];
 
 export const ALLOWED_STRING_FIELDS = new Set<string>([
@@ -127,10 +128,7 @@ function walk(value: unknown, seen: WeakSet<object>): unknown {
     seen.add(value);
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value)) {
-      if (keyIsSensitive(k)) {
-        out[k] = "[redacted]";
-        continue;
-      }
+      // Allowed fields win over sensitive patterns so the schema isn't nuked.
       if (ALLOWED_STRING_FIELDS.has(k)) {
         if (typeof v === "string") {
           out[k] = looksLikeSecret(v) ? "[redacted]" : truncate(v);
@@ -152,6 +150,10 @@ function walk(value: unknown, seen: WeakSet<object>): unknown {
         } else {
           out[k] = "[redacted]";
         }
+        continue;
+      }
+      if (keyIsSensitive(k)) {
+        out[k] = "[redacted]";
         continue;
       }
       // Generic case: recurse so nested objects/arrays still get cleaned,
