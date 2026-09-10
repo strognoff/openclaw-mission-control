@@ -149,7 +149,9 @@ following fields ever leave your box:
 - `agentId`, `agentName`, `hostname`, `platform`, `openclawVersion` (registration)
 - Event type: `heartbeat`, `run_started`, `run_completed`, `run_failed`,
   `thinking`, `tool_started`, `tool_completed`, `tool_failed`, `waiting`,
-  `agent_online`, `agent_offline`, `status_changed`
+  `agent_online`, `agent_offline`, `status_changed`,
+  `message_received`, `message_sent`,
+  `subagent_spawned`, `subagent_ended`, `cron_reconciled`
 - Status: `IDLE`, `WORKING`, `THINKING`, `TOOL`, `WAITING`, `COMPLETE`, `ERROR`
 - Tool name (e.g. `bash`, `web_fetch`, `image_generate`)
 - Short sanitised activity label (max 200 chars)
@@ -157,6 +159,29 @@ following fields ever leave your box:
 **Never reported** (stripped before send): prompts, responses, cookies,
 headers, environment variables, file paths, command arguments, secrets of
 any kind. See `packages/plugin/src/sanitise.ts` for the exact rules.
+
+> **Which hooks actually fire on which harness?** The plugin registers all
+> 15 typed hooks, but OpenClaw's harness dispatcher only emits a subset of
+> them per runtime:
+>
+> | Hook                 | Embedded/CLI runner | Telegram/Codex path |
+> |----------------------|---------------------|---------------------|
+> | `gateway_start`      | ✓                   | ✓                   |
+> | `gateway_stop`       | ✓                   | ✓                   |
+> | `message_received`   | ✓                   | ✓                   |
+> | `cron_reconciled`    | ✓                   | ✓                   |
+> | `message_sent`       | ✓                   | (not dispatched)    |
+> | `before_agent_run`   | ✓                   | (not dispatched)    |
+> | `agent_end`          | ✓                   | (not dispatched)    |
+> | `before_tool_call`   | ✓                   | (not dispatched)    |
+> | `after_tool_call`    | ✓                   | (not dispatched)    |
+> | `model_call_started` | ✓                   | (not dispatched)    |
+> | `model_call_ended`   | ✓                   | (not dispatched)    |
+> | `subagent_*`         | ✓                   | (rare)              |
+>
+> Practical impact: even on Telegram/Codex, the dashboard reflects
+> `WORKING` the moment a user message arrives (via `message_received`)
+> and `IDLE` again after the next 30 s heartbeat.
 
 ---
 

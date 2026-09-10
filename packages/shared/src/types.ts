@@ -31,6 +31,14 @@ export const EVENT_TYPES = [
   "waiting",
   "heartbeat",
   "status_changed",
+  // Message-level hooks (harness-independent — fire on every runtime)
+  "message_received",
+  "message_sent",
+  // Subagent lifecycle
+  "subagent_spawned",
+  "subagent_ended",
+  // Cron
+  "cron_reconciled",
 ] as const;
 
 export type EventType = (typeof EVENT_TYPES)[number];
@@ -268,4 +276,10 @@ export const STATUS_BEARING_EVENTS: ReadonlyArray<EventType> = [
   "tool_failed",
   "waiting",
   "status_changed",
+  // Harness-independent lifecycle: incoming message / subagent spawn = WORKING,
+  // outgoing reply / subagent end = IDLE.
+  "message_received",
+  "message_sent",
+  "subagent_spawned",
+  "subagent_ended",
 ];

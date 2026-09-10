@@ -306,6 +306,118 @@ export function mapWaiting(state: BuilderState, ctx: CommonCtx): McEventPayload 
   return buildPayload(state, "waiting", { status: "WAITING", activity: "Waiting" }, ctx);
 }
 
+/* ────────────────────────────────────────────────────────────────────────────
+ * Message + subagent + cron mappers (harness-independent).
+ *
+ * These fire on every runtime (including Codex / harness paths that don't
+ * emit before_agent_run). Adding them is what makes the dashboard reflect
+ * "agent is actually doing work" vs always-IDLE.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+export function mapMessageReceived(
+  state: BuilderState,
+  event: any,
+  ctx: CommonCtx,
+): McEventPayload | null {
+  const channel = cleanString(event?.channel);
+  const sender = cleanString(event?.sender);
+  return buildPayload(
+    state,
+    "message_received",
+    {
+      status: "WORKING",
+      activity: `Message received${channel ? ` (${channel})` : ""}${sender ? ` from ${sender}` : ""}`,
+    },
+    ctx,
+    {
+      ...(channel ? { channel } : {}),
+      ...(sender ? { sender } : {}),
+      ...(event?.messageId ? { messageId: cleanString(event.messageId) } : {}),
+    },
+  );
+}
+
+export function mapMessageSent(
+  state: BuilderState,
+  event: any,
+  ctx: CommonCtx,
+): McEventPayload | null {
+  const channel = cleanString(event?.channel);
+  return buildPayload(
+    state,
+    "message_sent",
+    {
+      status: "IDLE",
+      activity: `Reply sent${channel ? ` (${channel})` : ""}`,
+    },
+    ctx,
+    {
+      ...(channel ? { channel } : {}),
+      ...(event?.messageId ? { messageId: cleanString(event.messageId) } : {}),
+    },
+  );
+}
+
+export function mapSubagentSpawned(
+  state: BuilderState,
+  event: any,
+  ctx: CommonCtx,
+): McEventPayload | null {
+  const subId = cleanString(event?.subagentId ?? event?.id);
+  return buildPayload(
+    state,
+    "subagent_spawned",
+    {
+      status: "WORKING",
+      activity: subId ? `Subagent spawned (${subId})` : "Subagent spawned",
+    },
+    ctx,
+    { ...(subId ? { subagentId: subId } : {}) },
+  );
+}
+
+export function mapSubagentEnded(
+  state: BuilderState,
+  event: any,
+  ctx: CommonCtx,
+): McEventPayload | null {
+  const subId = cleanString(event?.subagentId ?? event?.id);
+  const success = event?.success !== false;
+  return buildPayload(
+    state,
+    "subagent_ended",
+    {
+      status: success ? "IDLE" : "ERROR",
+      activity: subId
+        ? `Subagent ${success ? "completed" : "failed"} (${subId})`
+        : `Subagent ${success ? "completed" : "failed"}`,
+    },
+    ctx,
+    {
+      ...(subId ? { subagentId: subId } : {}),
+      success,
+    },
+  );
+}
+
+export function mapCronReconciled(
+  state: BuilderState,
+  event: any,
+  ctx: CommonCtx,
+): McEventPayload | null {
+  return buildPayload(
+    state,
+    "cron_reconciled",
+    {
+      // informational — don't touch currentStatus (not in STATUS_BEARING_EVENTS
+      // … actually we put it OUT of STATUS_BEARING_EVENTS so the API skips it;
+      // using status: undefined explicitly here).
+      activity: "Cron reconciled",
+    },
+    ctx,
+  );
+}
+
 /** Pick a sanitised task label from a model-call hook context. Never throws. */
 export function safeTaskFromContext(event: any, _ctx: CommonCtx): string | undefined {
   // We deliberately DO NOT include the prompt text. If the operator has set

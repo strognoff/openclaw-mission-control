@@ -28,6 +28,11 @@ import {
   mapGatewayStop,
   mapSessionEnd,
   mapSessionStart,
+  mapMessageReceived,
+  mapMessageSent,
+  mapSubagentSpawned,
+  mapSubagentEnded,
+  mapCronReconciled,
   safeProviderFromContext,
   safeModelFromContext,
 } from "./bridge.js";
@@ -163,6 +168,30 @@ function entry(api: OpenClawPluginApi): void {
 
   api.on("after_tool_call", (event: any, ctx: any) => {
     safeEmit(mapToolEnd(state, event, ctx));
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Message + subagent + cron (harness-independent — fire on every runtime)
+  // ──────────────────────────────────────────────────────────────────────────
+
+  api.on("message_received", (event: any, ctx: any) => {
+    safeEmit(mapMessageReceived(state, event, ctx));
+  });
+
+  api.on("message_sent", (event: any, ctx: any) => {
+    safeEmit(mapMessageSent(state, event, ctx));
+  });
+
+  api.on("subagent_spawned", (event: any, ctx: any) => {
+    safeEmit(mapSubagentSpawned(state, event, ctx));
+  });
+
+  api.on("subagent_ended", (event: any, ctx: any) => {
+    safeEmit(mapSubagentEnded(state, event, ctx));
+  });
+
+  api.on("cron_reconciled", (event: any, ctx: any) => {
+    safeEmit(mapCronReconciled(state, event, ctx));
   });
 
   api.logger.info(`[mc] registered: ${state.agentName} @ ${config.url}`);

@@ -7,8 +7,7 @@
  */
 
 import Fastify from "fastify";
-import cors from "@fastify/cors";
-import { loadEnv, parseCorsOrigins, type AppEnv } from "./env.js";
+import { loadEnv, type AppEnv } from "./env.js";
 import { getPrisma, disconnectPrisma } from "./db.js";
 import { registerRoutes, createSseBroker } from "./routes.js";
 import { startOfflineReaper, startRetention, type SchedulerHandle } from "./schedulers.js";
@@ -35,11 +34,11 @@ export async function buildServer(env?: AppEnv): Promise<ServerHandle> {
     trustProxy: true,
   });
 
-  const corsOrigins = parseCorsOrigins(envResolved.MC_CORS_ORIGINS);
-  await app.register(cors, {
-    origin: corsOrigins === "*" ? true : corsOrigins,
-    credentials: false,
-  });
+  // CORS is handled at the nginx edge (see /etc/nginx/sites-available/menuboard-scraper
+  // `add_header Access-Control-Allow-Origin ... always`). Do NOT register @fastify/cors
+  // here — two CORS headers on the same response triggers a browser-side "multiple
+  // values" CORS error, even though the values match. If we ever serve the API
+  // directly (without nginx in front), re-enable this block and set MC_CORS_ORIGINS.
 
   // Connect DB once at boot. If the schema doesn't exist, push it.
   try {
