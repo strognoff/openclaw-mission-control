@@ -41,14 +41,15 @@ function readConfig(): ApiConfig {
 
 async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   const { url, adminKey } = readConfig();
+  const headers: Record<string, string> = {
+    ...(init.headers as Record<string, string> | undefined),
+    "content-type": "application/json",
+  };
+  if (adminKey) headers.authorization = `Bearer ${adminKey}`;
   const res = await fetch(`${url}${path}`, {
     ...init,
     cache: "no-store",
-    headers: {
-      ...init.headers,
-      authorization: `Bearer ***}`,
-      "content-type": "application/json",
-    },
+    headers,
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -73,10 +74,12 @@ export async function mintKey(agentId: string, label?: string): Promise<{
 
 export async function revokeKey(id: string): Promise<void> {
   const { url, adminKey } = readConfig();
+  const headers: Record<string, string> = {};
+  if (adminKey) headers.authorization = `Bearer ${adminKey}`;
   const res = await fetch(`${url}/v1/agents/admin/keys/${encodeURIComponent(id)}`, {
     method: "DELETE",
     cache: "no-store",
-    headers: { authorization: `Bearer ***}` },
+    headers,
   });
   if (!res.ok && res.status !== 204) {
     throw new Error(`API DELETE key returned ${res.status}`);
