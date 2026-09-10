@@ -1,0 +1,33 @@
+# Optional systemd unit for the Mission Control API.
+#
+# Install: copy to /etc/systemd/system/, then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now menuboard-mission-control-api
+#
+# Logs: journalctl -u menuboard-mission-control-api -f
+# Stop:  sudo systemctl stop menuboard-mission-control-api
+
+[Unit]
+Description=Mission Control API (Fastify + Prisma + SQLite)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=menuboard
+Group=menuboard
+WorkingDirectory=/opt/menuboard/mission-control/apps/api
+EnvironmentFile=/etc/menuboard/mission-control.env
+ExecStart=/usr/bin/node dist/server.js
+Restart=on-failure
+RestartSec=5
+
+# Hardening.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/menuboard/mission-control
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,28 @@
+# Optional systemd unit for the Mission Control dashboard.
+#
+# The dashboard is a standalone Next.js build (output: standalone in
+# next.config.mjs). The standalone server.js reads .next/standalone/*.
+
+[Unit]
+Description=Mission Control dashboard (Next.js 14)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=menuboard
+Group=menuboard
+WorkingDirectory=/opt/menuboard/mission-control/apps/dashboard
+EnvironmentFile=/etc/menuboard/mission-control.env
+# standalone output puts server.js at .next/standalone/apps/dashboard/server.js
+ExecStart=/usr/bin/node .next/standalone/apps/dashboard/server.js
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

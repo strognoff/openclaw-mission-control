@@ -1,0 +1,22 @@
+# Optional systemd timer for retention.
+#
+# Alternative to the in-process scheduler in apps/api. Run retention from a
+# dedicated unit so it can't accidentally run from multiple API processes.
+#
+# Install:
+#   sudo cp menuboard-mission-control-retention.{service,timer} /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now menuboard-mission-control-retention.timer
+
+[Unit]
+Description=Run Mission Control retention once (nightly)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=menuboard
+Group=menuboard
+WorkingDirectory=/opt/menuboard/mission-control/apps/api
+EnvironmentFile=/etc/menuboard/mission-control.env
+ExecStart=/usr/bin/node -e "import('./dist/schedulers.js').then(m => m.runRetentionOnce({ retentionDays: Number(process.env.MC_RETENTION_DAYS || 30), lockfile: process.env.MC_RETENTION_LOCKFILE || '/tmp/mc.retention.lock', logger: { info: console.log, warn: console.warn } })).then(r => process.exit(r.deleted > 0 ? 0 : 0))"

@@ -1,0 +1,11 @@
+# Paired with menuboard-mission-control-retention.timer
+[Unit]
+Description=Trigger nightly Mission Control retention
+
+[Timer]
+OnCalendar=*-*-* 03:15:00 UTC
+Persistent=true
+AccuracySec=5min
+
+[Install]
+WantedBy=timers.target
