@@ -12,6 +12,7 @@
 
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
+import { hostname as osHostname } from "node:os";
 import {
   resolveConfig,
   type PluginConfig,
@@ -58,10 +59,25 @@ function entry(api: OpenClawPluginApi): void {
   const sender: Sender = createSender({ config, logger });
 
   // Snapshot plugin identity to attach to every emitted event.
+  //
+  // Hostname fallback chain:
+  //   1. process.env.HOSTNAME (set by systemd, Docker, kubelet, etc.)
+  //   2. node:os.hostname() (the kernel's nodename — always non-empty on a real host)
+  //   3. "unknown-host" (final guard so we never register `hostname: ""`)
   const state = {
     agentName: config.agentName || config.agentId || "openclaw-agent",
     hostname:
-      (typeof process !== "undefined" && process.env?.HOSTNAME) ||
+      (typeof process !== "undefined" &&
+        process.env?.HOSTNAME &&
+        process.env.HOSTNAME.trim()) ||
+      (() => {
+        try {
+          const h = osHostname();
+          return h && h.trim() ? h : undefined;
+        } catch {
+          return undefined;
+        }
+      })() ||
       "unknown-host",
     platform:
       typeof process !== "undefined"

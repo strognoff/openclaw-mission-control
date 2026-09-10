@@ -78,6 +78,41 @@ export function createSender(deps: SenderDeps): Sender {
     return `${config.url.replace(/\/+$/, "")}/events`;
   }
 
+  /** Heartbeats hit a dedicated endpoint that bumps lastHeartbeat/lastSeen
+   *  without polluting the events stream. */
+  function heartbeatUrl(): string {
+    return `${config.url.replace(/\/+$/, "")}/heartbeat`;
+  }
+
+  /** Fire a single heartbeat directly at the API. The transport never
+   *  throws; failures are logged and counted, not re-queued. */
+  async function sendHeartbeatDirect(): Promise<void> {
+    const result = await transport({
+      url: heartbeatUrl(),
+      apiKey: config.apiKey,
+      // Only set `activity`. Status/task/tool are only sent by lifecycle
+      // hooks, so a bare heartbeat leaves the agent's currentStatus alone
+      // — exactly what the dashboard expects from a 30s liveness ping.
+      body: { activity: "Heartbeat" },
+      connectTimeoutMs: config.connectTimeoutMs,
+      readTimeoutMs: config.readTimeoutMs,
+      maxRetries: config.maxRetries,
+      onRetry: (attempt, delay, reason) => {
+        logger.warn("mc: heartbeat retry", { attempt, delay, reason });
+      },
+    });
+    if (result.ok) {
+      stats.heartbeats++;
+      logger.debug("mc: heartbeat ok");
+    } else {
+      logger.warn("mc: heartbeat failed", {
+        reason: result.reason,
+        message: result.message,
+        status: result.status,
+      });
+    }
+  }
+
   function enqueue(payload: McEventPayload): void {
     if (config.disablePlugin) return;
     if (!config.url || !config.agentId) {
@@ -160,21 +195,9 @@ export function createSender(deps: SenderDeps): Sender {
 
   function tickHeartbeat(): void {
     heartbeatTimer = setTimeout(() => {
-      try {
-        stats.heartbeats++;
-        enqueue({
-          type: "heartbeat",
-          status: "IDLE",
-          activity: "Heartbeat",
-          timestamp: new Date().toISOString(),
-          metadata: {
-            _agentId: config.agentId,
-            host: undefined,
-          },
-        });
-      } catch {
-        /* swallow */
-      }
+      // Fire-and-forget — transport never throws, schedules next tick
+      // regardless of success.
+      void sendHeartbeatDirect();
       if (!stopped) tickHeartbeat();
     }, config.heartbeatMs);
   }
