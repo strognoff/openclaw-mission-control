@@ -8,7 +8,7 @@
  * reload whenever a new SSE event arrives.
  */
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Agent } from "@openclaw-mc/shared";
 import {
   bucketEventsToday,
@@ -164,7 +164,38 @@ export function SummarySection() {
 
 export function AgentsSection() {
   const agents = useAgents();
-  const { online } = useMemo(() => computeStats(agents), [agents]);
+  const { online: onlineCount, offline: offlineCount } = useMemo(
+    () => computeStats(agents),
+    [agents],
+  );
+
+  // Split agents into online/offline for rendering.
+  // Recomputes on every SSE update — an agent that just went offline moves
+  // from the top grid into the collapsed section automatically.
+  const { onlineAgents, offlineAgents } = useMemo(() => {
+    const online: Agent[] = [];
+    const offline: Agent[] = [];
+    for (const a of agents) {
+      if (a.currentStatus === "OFFLINE") {
+        offline.push(a);
+      } else {
+        online.push(a);
+      }
+    }
+    return { onlineAgents: online, offlineAgents: offline };
+  }, [agents]);
+
+  // Collapse state for the offline section — persisted to localStorage.
+  // SSR-safe: defaults to collapsed, then updates on mount (brief flash).
+  const [showOffline, setShowOffline] = useState(false);
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("mc:show-offline");
+      if (stored === "true") setShowOffline(true);
+    } catch {
+      /* localStorage unavailable */
+    }
+  }, []);
 
   if (agents.length === 0) {
     return (
@@ -183,14 +214,54 @@ export function AgentsSection() {
       <div className="mb-3 flex items-end justify-between">
         <h3 className="mc-section-title">Agents</h3>
         <p className="text-[11px] text-ink-600">
-          {agents.length} total · {online} online
+          {agents.length} total · {onlineCount} online
+          {offlineCount > 0 ? ` · ${offlineCount} offline` : ""}
         </p>
       </div>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {agents.map((agent) => (
-          <AgentCard key={agent.id} agent={agent} />
-        ))}
-      </div>
+
+      {/* Online agents — always visible */}
+      {onlineAgents.length > 0 ? (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {onlineAgents.map((agent) => (
+            <AgentCard key={agent.id} agent={agent} />
+          ))}
+        </div>
+      ) : null}
+
+      {/* Offline agents — collapsed by default */}
+      {offlineAgents.length > 0 ? (
+        <details
+          className="group mt-4 overflow-hidden rounded-xl border border-ink-800/80 bg-ink-950/40"
+          open={showOffline}
+          onToggle={(e) => {
+            const isOpen = (e.target as HTMLDetailsElement).open;
+            setShowOffline(isOpen);
+            try {
+              localStorage.setItem("mc:show-offline", String(isOpen));
+            } catch {
+              /* localStorage unavailable */
+            }
+          }}
+        >
+          <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-3 transition-colors hover:bg-ink-800/40 [&::-webkit-details-marker]:hidden">
+            <div className="flex items-center gap-3">
+              <OfflineIcon className="h-4 w-4 text-ink-400" />
+              <span className="text-sm font-medium text-ink-200">
+                {offlineAgents.length} offline agent
+                {offlineAgents.length === 1 ? "" : "s"}
+              </span>
+            </div>
+            <span className="text-xs text-ink-500 transition-transform group-open:rotate-180">
+              ▾
+            </span>
+          </summary>
+          <div className="grid grid-cols-1 gap-4 border-t border-ink-800 p-4 md:grid-cols-2 xl:grid-cols-3">
+            {offlineAgents.map((agent) => (
+              <AgentCard key={agent.id} agent={agent} />
+            ))}
+          </div>
+        </details>
+      ) : null}
     </section>
   );
 }
