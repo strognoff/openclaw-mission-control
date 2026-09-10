@@ -1,6 +1,6 @@
 {
   "name": "@openclaw-mc/plugin",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "OpenClaw native plugin that streams sanitised lifecycle events to Mission Control.",
   "type": "module",
