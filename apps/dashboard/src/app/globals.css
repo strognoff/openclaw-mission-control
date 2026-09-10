@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background-color: #020617;
+  color: #e2e8f0;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, sans-serif;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Subtle gradient backdrop */
+body {
+  background-image: radial-gradient(
+      ellipse at top,
+      rgba(99, 102, 241, 0.08) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse at bottom right,
+      rgba(56, 189, 248, 0.05) 0%,
+      transparent 60%
+    );
+  background-attachment: fixed;
+}
+
+@layer components {
+  .mc-card {
+    @apply rounded-2xl border border-ink-800 bg-ink-900/60 backdrop-blur-sm shadow-glow;
+  }
+
+  .mc-card-hover {
+    @apply transition-all hover:border-indigo-500/40 hover:shadow-lg hover:shadow-indigo-500/5;
+  }
+
+  .mc-pill {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1;
+  }
+
+  .mc-input {
+    @apply w-full rounded-md border border-ink-700 bg-ink-900 px-3 py-2 text-sm
+      placeholder:text-ink-500 focus:border-indigo-500 focus:outline-none
+      focus:ring-1 focus:ring-indigo-500;
+  }
+
+  .mc-button {
+    @apply inline-flex items-center justify-center gap-2 rounded-md
+      border border-ink-700 bg-ink-800 px-3 py-2 text-sm font-medium
+      text-ink-100 hover:border-indigo-500 hover:bg-ink-700 disabled:opacity-50;
+  }
+
+  .mc-button-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-md
+      border border-indigo-500 bg-indigo-600 px-3 py-2 text-sm font-medium
+      text-white hover:bg-indigo-500 disabled:opacity-50;
+  }
+
+  .mc-link {
+    @apply text-indigo-300 underline-offset-4 hover:text-indigo-200 hover:underline;
+  }
+}
+
+/* Pulsing dot used for online/active states */
+@keyframes fox-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.fox-blink {
+  animation: fox-blink 1.6s ease-in-out infinite;
+}
