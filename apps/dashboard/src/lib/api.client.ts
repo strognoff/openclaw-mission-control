@@ -15,12 +15,27 @@ export interface ApiConfig {
 }
 
 function readConfig(): ApiConfig {
-  const url = (typeof window !== "undefined"
-    ? (window as any).__MC_API_URL__
-    : process.env.NEXT_PUBLIC_MC_API_URL) || "http://127.0.0.1:8787/v1/agents";
-  const adminKey = (typeof window !== "undefined"
-    ? (window as any).__MC_ADMIN_KEY__
-    : process.env.NEXT_PUBLIC_MC_ADMIN_KEY) || "";
+  // Fallback chain (works in both browser and server contexts):
+  //   1. window.__MC_API_URL__  (runtime override — injected by the server if it
+  //                              ever wants to override the build-time value)
+  //   2. process.env.NEXT_PUBLIC_MC_API_URL  (inlined at build time by Next.js;
+  //                                            the canonical browser-safe value)
+  //   3. localhost default (only useful for local dev)
+  //
+  // The previous version short-circuited to localhost whenever the
+  // window.__MC_API_URL__ global was unset (which it always is in our build),
+  // so the Keys page on the public HTTPS dashboard tried to reach
+  // 127.0.0.1:8788 from the user's browser → ERR_CONNECTION_REFUSED.
+  const winUrl =
+    typeof window !== "undefined" ? (window as any).__MC_API_URL__ : null;
+  const winKey =
+    typeof window !== "undefined" ? (window as any).__MC_ADMIN_KEY__ : null;
+  const url =
+    winUrl ||
+    process.env.NEXT_PUBLIC_MC_API_URL ||
+    "http://127.0.0.1:8787/v1/agents";
+  const adminKey =
+    winKey || process.env.NEXT_PUBLIC_MC_ADMIN_KEY || "";
   return { url: url.replace(/\/+$/, ""), adminKey };
 }
 
@@ -31,7 +46,7 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
     cache: "no-store",
     headers: {
       ...init.headers,
-      authorization: `Bearer ${adminKey}`,
+      authorization: `Bearer ***}`,
       "content-type": "application/json",
     },
   });
@@ -61,7 +76,7 @@ export async function revokeKey(id: string): Promise<void> {
   const res = await fetch(`${url}/v1/agents/admin/keys/${encodeURIComponent(id)}`, {
     method: "DELETE",
     cache: "no-store",
-    headers: { authorization: `Bearer ${adminKey}` },
+    headers: { authorization: `Bearer ***}` },
   });
   if (!res.ok && res.status !== 204) {
     throw new Error(`API DELETE key returned ${res.status}`);
