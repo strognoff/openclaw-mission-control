@@ -14,8 +14,6 @@ import { useEffect, useMemo, useState } from "react";
 import type { Agent, Event, SseMessage } from "@openclaw-mc/shared";
 import {
   eventDot,
-  isOnlineStatus,
-  relativeTime,
   shortTime,
   statusColors,
   summarizeEvent,

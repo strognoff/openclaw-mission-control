@@ -30,8 +30,6 @@ export interface SenderDeps {
   logger: SenderLogger;
   /** Inject a custom transport for tests. Defaults to postJson. */
   transport?: typeof postJson;
-  /** Inject a sleep for tests. Defaults to setTimeout-based sleep. */
-  sleep?: (ms: number) => Promise<void>;
 }
 
 export interface Sender {
@@ -52,14 +50,11 @@ export interface SenderStats {
   heartbeats: number;
 }
 
-function defaultSleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+
 
 export function createSender(deps: SenderDeps): Sender {
   const { config, logger } = deps;
   const transport = deps.transport ?? postJson;
-  const sleep = deps.sleep ?? defaultSleep;
 
   const queue: BoundedQueue<McEventPayload> = createBoundedQueue<McEventPayload>(
     config.queueSize,
@@ -81,10 +76,6 @@ export function createSender(deps: SenderDeps): Sender {
   /** Decide what URL to call based on the payload kind. */
   function urlFor(): string {
     return `${config.url.replace(/\/+$/, "")}/events`;
-  }
-
-  function headersFor(): Record<string, string> {
-    return config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {};
   }
 
   function enqueue(payload: McEventPayload): void {

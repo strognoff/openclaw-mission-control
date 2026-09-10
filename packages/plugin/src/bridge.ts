@@ -307,7 +307,7 @@ export function mapWaiting(state: BuilderState, ctx: CommonCtx): McEventPayload 
 }
 
 /** Pick a sanitised task label from a model-call hook context. Never throws. */
-export function safeTaskFromContext(event: any, ctx: CommonCtx): string | undefined {
+export function safeTaskFromContext(event: any, _ctx: CommonCtx): string | undefined {
   // We deliberately DO NOT include the prompt text. If the operator has set
   // a task label somewhere upstream, that wins. Otherwise return nothing.
   if (typeof event?.task === "string") return cleanString(event.task);

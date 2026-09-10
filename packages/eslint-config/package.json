@@ -2,12 +2,11 @@
   "name": "@openclaw-mc/eslint-config",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
-  "main": "index.cjs",
+  "main": "index.js",
   "exports": {
-    ".": "./index.cjs",
-    "./node": "./node.cjs",
-    "./browser": "./browser.cjs"
+    ".": "./index.js",
+    "./node": "./node.js",
+    "./browser": "./browser.js"
   },
   "dependencies": {
     "@typescript-eslint/eslint-plugin": "^7.18.0",

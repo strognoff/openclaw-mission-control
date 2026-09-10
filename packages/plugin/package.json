@@ -16,7 +16,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "lint": "eslint --config ../../eslint.config.cjs src --ext .ts"
+    "lint": "ESLINT_USE_FLAT_CONFIG=false eslint src --ext .ts"
   },
   "openclaw": {
     "extensions": ["./dist/index.js"],

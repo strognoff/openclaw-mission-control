@@ -10,9 +10,9 @@
     "packages/*"
   ],
   "scripts": {
-    "lint": "npm run -ws --if-present lint",
-    "test": "npm run -ws --if-present test",
-    "build": "npm run -ws --if-present build",
+    "lint": "npm run --workspaces --if-present lint",
+    "test": "npm run --workspaces --if-present test",
+    "build": "npm run --workspaces --if-present build",
     "dev:api": "npm --workspace apps/api run dev",
     "dev:dashboard": "npm --workspace apps/dashboard run dev",
     "clean": "rm -rf apps/*/dist apps/*/.next packages/*/dist"
@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
+    "eslint": "^8.57.0",
     "typescript": "^5.4.5"
   }
 }

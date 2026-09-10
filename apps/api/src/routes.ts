@@ -26,7 +26,6 @@ import {
   publishAgentAdded,
   publishAgentUpdated,
   publishEventAdded,
-  publishAgentRemoved,
   type SseBroker,
 } from "./sse-broker.js";
 import type { AppEnv } from "./env.js";
@@ -138,7 +137,6 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
 
     // The matching key must exist BEFORE the agent can register. This is
     // what stops a bot from inventing its own identity.
-    const keyHash = await hashKey(apiKey);
     const keyPrefix = apiKey.slice(0, 8);
     const existingKey = await prisma.apiKey.findFirst({
       where: { keyPrefix, revokedAt: null },
@@ -236,7 +234,7 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
     const rows = [];
     for (const ev of parsed.data.events) {
       const ts = ev.timestamp ? new Date(ev.timestamp) : new Date();
-      let runId: string | null = ev.runId ?? null;
+      const runId: string | null = ev.runId ?? null;
 
       if (ev.type === "run_started" && runId) {
         await prisma.run.upsert({

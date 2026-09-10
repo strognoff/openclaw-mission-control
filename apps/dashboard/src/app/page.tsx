@@ -8,7 +8,7 @@
  */
 
 import { listAgents, listRecentEvents, liveStreamUrl } from "@/lib/api.server";
-import { isOnlineStatus, relativeTime, statusColors } from "@/lib/format";
+import { isOnlineStatus, relativeTime } from "@/lib/format";
 import { AgentCard } from "@/components/AgentCard";
 import { SummaryTiles } from "@/components/SummaryTiles";
 import { LiveActivityFeed } from "@/components/LiveActivityFeed";

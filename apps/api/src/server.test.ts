@@ -25,7 +25,6 @@ const ADMIN_KEY = "0123456789abcdef0123456789abcdef";
 let testDir = "";
 let app: Awaited<ReturnType<typeof import("./server.js").buildServer>>;
 let agentKey = "";
-let agentKeyId = "";
 
 async function freshServer() {
   // Tear down previous app first.
