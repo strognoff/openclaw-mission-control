@@ -1,17 +1,30 @@
 "use client";
 
 /**
- * LiveActivityFeed — client component that opens the SSE stream and keeps
- * a rolling list of the most recent events across all agents.
+ * LiveActivityFeed — client component that opens the SSE stream and renders
+ * the most recent activity for one or all agents, with consecutive events of
+ * the same type aggregated into a single row carrying a ×N count badge.
  *
- * - Server provides the initial 30 events so the page is meaningful before
+ * Behaviour:
+ * - Server provides the initial 120 events so the page is meaningful before
  *   the first SSE message arrives.
- * - SSE messages patch the list in place with a fade-in animation.
+ * - SSE messages patch the rolling buffer (capped at 500 raw events) in place.
+ * - The displayed list is filtered by the active tab ("all" or a single
+ *   agentId) and then aggregated: consecutive events with the same
+ *   (agentId, type) collapse into one row, count increments on each new
+ *   raw event of the same kind.
+ * - A maximum of MAX_DISPLAY rows is rendered.
  * - Failed connections retry with exponential backoff up to 30s.
  */
 
 import { useEffect, useMemo, useState } from "react";
-import type { Agent, Event, SseMessage, EventType } from "@openclaw-mc/shared";
+import type {
+  Agent,
+  AgentStatus,
+  Event,
+  EventType,
+  SseMessage,
+} from "@openclaw-mc/shared";
 import { eventDot, shortTime, statusColors, summarizeEvent } from "@/lib/format";
 import {
   ActivityIcon,
@@ -32,18 +45,26 @@ interface Props {
   streamUrl: string;
 }
 
-interface FeedEntry {
+interface AggregatedEntry {
+  /** First event id in this aggregate — stable React key. */
   id: string;
-  timestamp: string;
+  type: EventType;
   agentId: string;
   agentName: string;
-  type: EventType | string;
-  status: string | null;
-  activity: string;
+  status: AgentStatus | null;
+  activity: string | null;
+  tool: string | null;
+  firstTimestamp: string;
+  lastTimestamp: string;
+  /** Number of consecutive raw events that collapsed into this row. */
+  count: number;
+  /** True only for aggregates that were just created (triggers fade-in). */
   fresh: boolean;
 }
 
-const MAX_FEED = 50;
+const MAX_BUFFER = 500;
+const MAX_DISPLAY = 10;
+const FRESH_FADE_MS = 700;
 
 const TYPE_ICON: Record<string, React.ReactNode> = {
   agent_online: <AgentIcon className="h-3.5 w-3.5" />,
@@ -75,6 +96,8 @@ const TYPE_LABEL: Record<string, string> = {
   status_changed: "status",
 };
 
+const ALL_TAB = "all";
+
 function avatarColor(agentId: string): string {
   const palette = [
     "from-indigo-500/40 to-sky-500/40 text-indigo-200",
@@ -95,22 +118,60 @@ function avatarColor(agentId: string): string {
 function avatarLetter(agentName: string): string {
   const trimmed = agentName.trim();
   if (!trimmed) return "?";
-  // Prefer first alphanumeric char; fall back to first character.
   const m = trimmed.match(/[a-zA-Z0-9]/);
   return (m?.[0] ?? trimmed[0]).toUpperCase();
 }
 
+function aggregateEvents(
+  events: Event[],
+  agentMap: Map<string, Agent>,
+  max: number,
+  freshIds: Set<string>,
+): AggregatedEntry[] {
+  const out: AggregatedEntry[] = [];
+  for (const e of events) {
+    const last = out[out.length - 1];
+    if (last && last.type === e.type && last.agentId === e.agentId) {
+      // Merge consecutive same-type events for the same agent.
+      last.count += 1;
+      last.lastTimestamp = e.timestamp;
+      last.activity = e.activity ?? last.activity;
+      last.tool = e.tool ?? last.tool;
+      if (e.status) last.status = e.status;
+      // Don't set fresh on merge — only on a NEW aggregate entry.
+    } else {
+      out.push({
+        id: e.id,
+        type: e.type,
+        agentId: e.agentId,
+        agentName: agentMap.get(e.agentId)?.name ?? e.agentId,
+        status: e.status,
+        activity: e.activity,
+        tool: e.tool,
+        firstTimestamp: e.timestamp,
+        lastTimestamp: e.timestamp,
+        count: 1,
+        fresh: freshIds.has(e.id),
+      });
+    }
+  }
+  return out.slice(0, max);
+}
+
 export function LiveActivityFeed({ initialEvents, agents, streamUrl }: Props) {
-  const [entries, setEntries] = useState<FeedEntry[]>(() =>
-    initialEvents.map((e) => ({ ...toEntry(e, agents), fresh: false })),
+  const [buffer, setBuffer] = useState<Event[]>(() =>
+    initialEvents.slice(0, MAX_BUFFER),
   );
+  const [freshIds, setFreshIds] = useState<Set<string>>(() => new Set());
   const [agentMap, setAgentMap] = useState<Map<string, Agent>>(
     () => new Map(agents.map((a) => [a.id, a])),
   );
+  const [tab, setTab] = useState<string>(ALL_TAB);
   const [connection, setConnection] = useState<
     "connecting" | "open" | "closed"
   >("connecting");
 
+  // SSE connection
   useEffect(() => {
     let es: EventSource | null = null;
     let retryMs = 1_000;
@@ -151,18 +212,22 @@ export function LiveActivityFeed({ initialEvents, agents, streamUrl }: Props) {
 
     function handleMessage(msg: SseMessage) {
       if (msg.type === "event_added") {
-        const agent = agentMap.get(msg.event.agentId);
-        const entry = {
-          ...toEntry(msg.event, agent ? [agent] : Array.from(agentMap.values())),
-          fresh: true,
-        };
-        setEntries((prev) => [entry, ...prev].slice(0, MAX_FEED));
-        // Clear the `fresh` flag after the animation so re-renders don't replay it.
+        const eid = msg.event.id;
+        setBuffer((prev) => [msg.event, ...prev].slice(0, MAX_BUFFER));
+        setFreshIds((prev) => {
+          if (prev.has(eid)) return prev;
+          const next = new Set(prev);
+          next.add(eid);
+          return next;
+        });
         setTimeout(() => {
-          setEntries((prev) =>
-            prev.map((e) => (e.id === entry.id ? { ...e, fresh: false } : e)),
-          );
-        }, 400);
+          setFreshIds((prev) => {
+            if (!prev.has(eid)) return prev;
+            const next = new Set(prev);
+            next.delete(eid);
+            return next;
+          });
+        }, FRESH_FADE_MS);
       } else if (msg.type === "agent_added" || msg.type === "agent_updated") {
         setAgentMap((prev) => {
           const next = new Map(prev);
@@ -185,6 +250,37 @@ export function LiveActivityFeed({ initialEvents, agents, streamUrl }: Props) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [streamUrl]);
+
+  // Per-agent raw event counts (used in tab badges).
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { [ALL_TAB]: buffer.length };
+    for (const e of buffer) {
+      c[e.agentId] = (c[e.agentId] ?? 0) + 1;
+    }
+    return c;
+  }, [buffer]);
+
+  // Filter by active tab, then aggregate consecutive same-type events.
+  const filtered = useMemo(
+    () =>
+      tab === ALL_TAB ? buffer : buffer.filter((e) => e.agentId === tab),
+    [buffer, tab],
+  );
+
+  const aggregated = useMemo(
+    () => aggregateEvents(filtered, agentMap, MAX_DISPLAY, freshIds),
+    [filtered, agentMap, freshIds],
+  );
+
+  // Sorted agent list for the tab strip — online first, then alphabetical.
+  const sortedAgents = useMemo(() => {
+    return Array.from(agentMap.values()).sort((a, b) => {
+      const aOnline = a.currentStatus !== "OFFLINE" ? 0 : 1;
+      const bOnline = b.currentStatus !== "OFFLINE" ? 0 : 1;
+      if (aOnline !== bOnline) return aOnline - bOnline;
+      return a.name.localeCompare(b.name);
+    });
+  }, [agentMap]);
 
   const connectionBadge = useMemo(() => {
     if (connection === "open") {
@@ -216,33 +312,75 @@ export function LiveActivityFeed({ initialEvents, agents, streamUrl }: Props) {
 
   return (
     <div className="mc-card overflow-hidden">
-      <div className="flex items-center justify-between gap-3 border-b border-ink-800/80 px-4 py-3 sm:px-5">
+      {/* Tab strip — "All" + one tab per agent. */}
+      <div
+        className="flex items-center gap-1 overflow-x-auto border-b border-ink-800/80 px-2 py-2 sm:px-3"
+        role="tablist"
+        aria-label="Filter live activity by agent"
+      >
+        <TabButton
+          active={tab === ALL_TAB}
+          onClick={() => setTab(ALL_TAB)}
+          icon={<ActivityIcon className="h-3 w-3" />}
+          label="All"
+          count={counts[ALL_TAB] ?? 0}
+        />
+        {sortedAgents.map((a) => {
+          const dot = statusColors(a.currentStatus).dot;
+          return (
+            <TabButton
+              key={a.id}
+              active={tab === a.id}
+              onClick={() => setTab(a.id)}
+              icon={<span className={`h-1.5 w-1.5 rounded-full ${dot}`} />}
+              label={a.name}
+              count={counts[a.id] ?? 0}
+            />
+          );
+        })}
+      </div>
+
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3 border-b border-ink-800/80 px-4 py-2.5 sm:px-5">
         <div className="flex items-center gap-2 text-sm">
           <ActivityIcon className="h-4 w-4 text-ink-400" />
           <span className="text-ink-200">
-            <span className="font-medium">{entries.length}</span>{" "}
-            <span className="text-ink-500">recent events</span>
+            <span className="font-medium">{aggregated.length}</span>{" "}
+            <span className="text-ink-500">
+              aggregated row{aggregated.length === 1 ? "" : "s"}
+            </span>
+            <span className="text-ink-700"> · </span>
+            <span className="text-ink-500">
+              <span className="font-mono text-ink-300">{filtered.length}</span>{" "}
+              raw event{filtered.length === 1 ? "" : "s"}
+            </span>
           </span>
         </div>
         {connectionBadge}
       </div>
 
+      {/* Aggregated list */}
       <ul className="mc-scroll divide-y divide-ink-800/60">
-        {entries.length === 0 ? (
+        {aggregated.length === 0 ? (
           <li className="px-4 py-12 text-center text-sm text-ink-500">
-            No activity yet.
+            No activity yet for{" "}
+            <span className="text-ink-300">
+              {tab === ALL_TAB ? "any agent" : agentMap.get(tab)?.name ?? tab}
+            </span>
+            .
             <p className="mt-1 text-xs text-ink-600">
               Events appear here as agents heartbeat, run tasks, and call tools.
             </p>
           </li>
         ) : (
-          entries.map((entry) => {
+          aggregated.map((entry) => {
             const colors = eventColor(entry.type);
             const typeLabel = TYPE_LABEL[entry.type] ?? entry.type;
             const typeIcon = TYPE_ICON[entry.type] ?? (
               <ActivityIcon className="h-3.5 w-3.5" />
             );
             const status = entry.status ? statusColors(entry.status) : null;
+            const activity = summarizeEvent(entry.activity, entry.tool);
             return (
               <li
                 key={entry.id}
@@ -250,6 +388,22 @@ export function LiveActivityFeed({ initialEvents, agents, streamUrl }: Props) {
                   entry.fresh ? "mc-fade-in" : ""
                 }`}
               >
+                {/* ×N count badge on the LEFT — prominent when > 1. */}
+                <div className="flex h-9 w-12 shrink-0 items-center justify-center">
+                  {entry.count > 1 ? (
+                    <div className="flex h-full w-full items-center justify-center rounded-lg bg-fuchsia-500/15 ring-1 ring-fuchsia-500/30">
+                      <span className="text-base font-bold tabular-nums text-fuchsia-200">
+                        ×{entry.count}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-ink-700" aria-hidden>
+                      ·
+                    </span>
+                  )}
+                </div>
+
+                {/* Agent avatar */}
                 <div className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ring-1 ring-white/5">
                   <span
                     className={`absolute inset-0 rounded-full bg-gradient-to-br ${avatarColor(
@@ -261,8 +415,9 @@ export function LiveActivityFeed({ initialEvents, agents, streamUrl }: Props) {
                   </span>
                 </div>
 
+                {/* Content */}
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span
                       className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 ${colors.bg} ${colors.text} ${colors.ring}`}
                     >
@@ -276,18 +431,26 @@ export function LiveActivityFeed({ initialEvents, agents, streamUrl }: Props) {
                       <span
                         className={`mc-pill text-[10px] ${status.bg} ${status.text} ${status.ring}`}
                       >
-                        <span className={`h-1 w-1 rounded-full ${status.dot}`} />
+                        <span
+                          className={`h-1 w-1 rounded-full ${status.dot}`}
+                        />
                         {entry.status}
+                      </span>
+                    ) : null}
+                    {entry.count > 1 ? (
+                      <span className="hidden font-mono text-[10px] text-ink-600 sm:inline">
+                        {shortTime(entry.firstTimestamp)} →{" "}
+                        {shortTime(entry.lastTimestamp)}
                       </span>
                     ) : null}
                   </div>
                   <p className="mt-0.5 truncate text-xs text-ink-400">
-                    {entry.activity}
+                    {activity || "—"}
                   </p>
                 </div>
 
                 <span className="hidden shrink-0 font-mono text-[11px] text-ink-500 sm:inline">
-                  {shortTime(entry.timestamp)}
+                  {shortTime(entry.lastTimestamp)}
                 </span>
               </li>
             );
@@ -298,11 +461,56 @@ export function LiveActivityFeed({ initialEvents, agents, streamUrl }: Props) {
   );
 }
 
+function TabButton({
+  active,
+  onClick,
+  icon,
+  label,
+  count,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+  count: number;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium ring-1 transition-colors ${
+        active
+          ? "bg-ink-800/80 text-ink-50 ring-ink-700/40"
+          : "bg-ink-900/40 text-ink-400 ring-ink-800/30 hover:bg-ink-800/40 hover:text-ink-200"
+      }`}
+    >
+      <span
+        className={`flex h-3 w-3 items-center justify-center ${
+          active ? "text-ink-200" : "text-ink-500"
+        }`}
+      >
+        {icon}
+      </span>
+      <span className="max-w-[10rem] truncate">{label}</span>
+      <span
+        className={`font-mono text-[10px] tabular-nums ${
+          active ? "text-ink-400" : "text-ink-600"
+        }`}
+      >
+        {count}
+      </span>
+    </button>
+  );
+}
+
 function eventColor(type: string) {
   const dot = eventDot(type);
-  // Map dot class → a small chip palette. This keeps consistency with
-  // existing event semantics without duplicating the colour map.
-  const map: Record<string, { bg: string; text: string; ring: string; iconText: string }> = {
+  const map: Record<
+    string,
+    { bg: string; text: string; ring: string; iconText: string }
+  > = {
     "bg-emerald-400": {
       bg: "bg-emerald-500/10",
       text: "text-emerald-200",
@@ -366,20 +574,4 @@ function eventColor(type: string) {
       iconText: "text-ink-400",
     }
   );
-}
-
-function toEntry(
-  event: Event,
-  agents: Agent[],
-): Omit<FeedEntry, "fresh"> {
-  const agent = agents.find((a) => a.id === event.agentId);
-  return {
-    id: event.id,
-    timestamp: event.timestamp,
-    agentId: event.agentId,
-    agentName: agent?.name ?? event.agentId,
-    type: event.type,
-    status: event.status,
-    activity: summarizeEvent(event.activity, event.tool),
-  };
 }
