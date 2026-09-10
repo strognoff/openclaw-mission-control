@@ -1,0 +1,44 @@
+{
+  "name": "@openclaw-mc/plugin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpenClaw native plugin that streams sanitised lifecycle events to Mission Control.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": ["dist", "openclaw.plugin.json"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "lint": "eslint --config ../../eslint.config.cjs src --ext .ts"
+  },
+  "openclaw": {
+    "extensions": ["./dist/index.js"],
+    "compat": {
+      "pluginApi": ">=2026.3.24-beta.2",
+      "minGatewayVersion": "2026.9.2"
+    },
+    "build": {
+      "openclawVersion": "2026.9.2",
+      "pluginSdkVersion": "2026.9.2"
+    }
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.9.2"
+  },
+  "dependencies": {
+    "@openclaw-mc/shared": "*"
+  },
+  "devDependencies": {
+    "@openclaw-mc/eslint-config": "*",
+    "@types/node": "^20.11.0",
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
+  }
+}
