@@ -129,3 +129,38 @@ export function summarizeEvent(activity: string | null, tool: string | null): st
   if (tool) return `Tool: ${tool}`;
   return "—";
 }
+
+/**
+ * Bucket helpers for the dashboard's "today" metrics.
+ *
+ * isToday(iso)  — true if the timestamp falls on the same calendar day
+ *                 as the current local time.
+ * hourly(events) — counts events per hour, returning N buckets ending
+ *                  at the current hour (oldest first).
+ */
+export const bucketEventsToday = {
+  isToday(iso: string): boolean {
+    const d = new Date(iso);
+    const now = new Date();
+    return (
+      d.getFullYear() === now.getFullYear() &&
+      d.getMonth() === now.getMonth() &&
+      d.getDate() === now.getDate()
+    );
+  },
+  hourly(events: { timestamp: string }[], hours = 12): number[] {
+    const now = Date.now();
+    const hourMs = 3_600_000;
+    const buckets: number[] = [];
+    for (let i = hours - 1; i >= 0; i--) {
+      const end = now - i * hourMs;
+      const start = end - hourMs;
+      const count = events.filter((e) => {
+        const t = new Date(e.timestamp).getTime();
+        return t >= start && t < end;
+      }).length;
+      buckets.push(count);
+    }
+    return buckets;
+  },
+};

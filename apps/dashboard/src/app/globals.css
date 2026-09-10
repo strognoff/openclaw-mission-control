@@ -4,11 +4,14 @@
 
 :root {
   color-scheme: dark;
+  --mc-accent: #6366f1;
+  --mc-accent-2: #38bdf8;
+  --mc-bg: #020617;
 }
 
 html,
 body {
-  background-color: #020617;
+  background-color: var(--mc-bg);
   color: #e2e8f0;
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     Roboto, sans-serif;
@@ -16,63 +19,128 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Subtle gradient backdrop */
 body {
-  background-image: radial-gradient(
-      ellipse at top,
-      rgba(99, 102, 241, 0.08) 0%,
-      transparent 60%
-    ),
-    radial-gradient(
-      ellipse at bottom right,
-      rgba(56, 189, 248, 0.05) 0%,
-      transparent 60%
-    );
+  /* Layered radial gradients give the page depth without being noisy. */
+  background-image:
+    radial-gradient(ellipse 1200px 600px at 0% -10%, rgba(99, 102, 241, 0.12) 0%, transparent 60%),
+    radial-gradient(ellipse 900px 500px at 100% 0%, rgba(56, 189, 248, 0.08) 0%, transparent 60%),
+    radial-gradient(ellipse 1000px 800px at 50% 100%, rgba(192, 132, 252, 0.05) 0%, transparent 70%);
   background-attachment: fixed;
+  min-height: 100vh;
 }
 
 @layer components {
   .mc-card {
-    @apply rounded-2xl border border-ink-800 bg-ink-900/60 backdrop-blur-sm shadow-glow;
+    @apply rounded-xl border border-ink-800/80 bg-ink-900/60 backdrop-blur-sm;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.04),
+      0 1px 0 rgba(0, 0, 0, 0.4);
   }
 
   .mc-card-hover {
-    @apply transition-all hover:border-indigo-500/40 hover:shadow-lg hover:shadow-indigo-500/5;
+    @apply transition-all duration-200;
+  }
+  .mc-card-hover:hover {
+    @apply border-indigo-500/40;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.04),
+      0 8px 24px -8px rgba(99, 102, 241, 0.18);
+    transform: translateY(-1px);
   }
 
   .mc-pill {
-    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1;
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 whitespace-nowrap;
   }
 
   .mc-input {
     @apply w-full rounded-md border border-ink-700 bg-ink-900 px-3 py-2 text-sm
       placeholder:text-ink-500 focus:border-indigo-500 focus:outline-none
-      focus:ring-1 focus:ring-indigo-500;
+      focus:ring-2 focus:ring-indigo-500/30 transition-colors;
   }
 
   .mc-button {
     @apply inline-flex items-center justify-center gap-2 rounded-md
-      border border-ink-700 bg-ink-800 px-3 py-2 text-sm font-medium
-      text-ink-100 hover:border-indigo-500 hover:bg-ink-700 disabled:opacity-50;
+      border border-ink-700 bg-ink-800/80 px-3 py-2 text-sm font-medium
+      text-ink-100 hover:border-indigo-500/60 hover:bg-ink-700/80
+      transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .mc-button-primary {
     @apply inline-flex items-center justify-center gap-2 rounded-md
-      border border-indigo-500 bg-indigo-600 px-3 py-2 text-sm font-medium
-      text-white hover:bg-indigo-500 disabled:opacity-50;
+      border border-indigo-500/50 bg-indigo-600 px-3 py-2 text-sm font-medium
+      text-white shadow-[0_0_0_1px_rgba(99,102,241,0.3),0_2px_8px_rgba(99,102,241,0.2)]
+      hover:bg-indigo-500 hover:border-indigo-400
+      transition-all disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .mc-link {
-    @apply text-indigo-300 underline-offset-4 hover:text-indigo-200 hover:underline;
+    @apply text-indigo-300 underline-offset-4 hover:text-indigo-200 hover:underline
+      transition-colors;
+  }
+
+  .mc-section-title {
+    @apply text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-400;
+  }
+
+  .mc-grad-text {
+    background: linear-gradient(135deg, #fed7aa 0%, #fb923c 50%, #f97316 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .mc-grad-border {
+    position: relative;
+  }
+  .mc-grad-border::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.5), rgba(56, 189, 248, 0.5));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    pointer-events: none;
+    opacity: 0.6;
   }
 }
 
-/* Pulsing dot used for online/active states */
 @keyframes fox-blink {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+  50% { opacity: 0.35; }
+}
+.fox-blink { animation: fox-blink 1.6s ease-in-out infinite; }
+
+@keyframes mc-pulse-dot {
+  0% { box-shadow: 0 0 0 0 currentColor; opacity: 0.8; }
+  70% { box-shadow: 0 0 0 8px transparent; opacity: 0; }
+  100% { box-shadow: 0 0 0 0 transparent; opacity: 0; }
+}
+.fox-pulse { animation: mc-pulse-dot 1.8s ease-out infinite; }
+
+@keyframes mc-fade-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.mc-fade-in { animation: mc-fade-in 320ms ease-out; }
+
+@keyframes mc-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.mc-shimmer {
+  background: linear-gradient(90deg, rgba(30, 41, 59, 0.4) 0%, rgba(51, 65, 85, 0.6) 50%, rgba(30, 41, 59, 0.4) 100%);
+  background-size: 200% 100%;
+  animation: mc-shimmer 1.6s linear infinite;
 }
 
-.fox-blink {
-  animation: fox-blink 1.6s ease-in-out infinite;
-}
+/* Custom scrollbar for the activity feed on dark backgrounds */
+.mc-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+.mc-scroll::-webkit-scrollbar-track { background: transparent; }
+.mc-scroll::-webkit-scrollbar-thumb { background: rgba(99, 102, 241, 0.25); border-radius: 3px; }
+.mc-scroll::-webkit-scrollbar-thumb:hover { background: rgba(99, 102, 241, 0.45); }
+
+/* Selection styling so it feels consistent with the brand */
+::selection { background: rgba(99, 102, 241, 0.4); color: #f8fafc; }
