@@ -25,6 +25,7 @@ const ADMIN_KEY = "0123456789abcdef0123456789abcdef";
 let testDir = "";
 let app: Awaited<ReturnType<typeof import("./server.js").buildServer>>;
 let agentKey = "";
+let agentKeyId = "";
 
 async function freshServer() {
   // Tear down previous app first.
@@ -218,6 +219,7 @@ describe("event ingestion", () => {
     const minted = await mintAgentKey("bot-evt");
     agentKey = minted.apiKey;
     agentKeyId = minted.id;
+    void agentKeyId; // referenced for completeness; reserved for future assertions
     // Need to register first so the agent row exists.
     await app.app.inject({
       method: "POST",
