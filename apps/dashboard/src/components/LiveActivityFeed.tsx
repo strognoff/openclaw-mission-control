@@ -26,6 +26,7 @@ import type {
 } from "@openclaw-mc/shared";
 import {
   eventDot,
+  isOnlineStatus,
   statusColors,
   summarizeEvent,
 } from "@/lib/format";
@@ -230,30 +231,45 @@ export function LiveActivityFeed({ maxBuffer: _maxBuffer = 500 }: Props = {}) {
     [agents],
   );
 
-  // Strip heartbeats when the user has chosen to hide them.
+  // Strip heartbeats when the user has chosen to hide them. (Filtering of
+  // offline agents happens at the "All" tab step below — explicit per-agent
+  // drill-downs keep showing that agent's full history even when offline.)
   const visibleBuffer = useMemo(
     () =>
       hideHeartbeat ? events.filter((e) => e.type !== "heartbeat") : events,
     [events, hideHeartbeat],
   );
 
-  // Per-agent raw event counts (used in tab badges).
+  // Filter by active tab, then aggregate consecutive same-type events.
+  // On the "All" tab we also drop events from agents that are currently
+  // OFFLINE — matches HeroStrip/AgentsSection which both collapse offline
+  // agents — so the live panel isn't dominated by stale rows from agents
+  // that aren't even around. Carve-out: agent_online / agent_offline
+  // transitions always surface so users see *why* an agent dropped off.
+  // Per-agent drill-downs (tab !== ALL_TAB) keep showing that agent's
+  // history — that's an explicit user choice.
+  const filtered = useMemo(() => {
+    if (tab !== ALL_TAB) {
+      return visibleBuffer.filter((e) => e.agentId === tab);
+    }
+    return visibleBuffer.filter((e) => {
+      if (e.type === "agent_online" || e.type === "agent_offline") return true;
+      const agent = agentMap.get(e.agentId);
+      if (!agent) return false;
+      return isOnlineStatus(agent.currentStatus);
+    });
+  }, [visibleBuffer, tab, agentMap]);
+
+  // Per-agent raw event counts (used in tab badges). Computed from the
+  // post-filter list so the "All" badge accurately reflects what's visible
+  // (events from currently-OFFLINE agents are excluded).
   const counts = useMemo(() => {
-    const c: Record<string, number> = { [ALL_TAB]: visibleBuffer.length };
-    for (const e of visibleBuffer) {
+    const c: Record<string, number> = { [ALL_TAB]: filtered.length };
+    for (const e of filtered) {
       c[e.agentId] = (c[e.agentId] ?? 0) + 1;
     }
     return c;
-  }, [visibleBuffer]);
-
-  // Filter by active tab, then aggregate consecutive same-type events.
-  const filtered = useMemo(
-    () =>
-      tab === ALL_TAB
-        ? visibleBuffer
-        : visibleBuffer.filter((e) => e.agentId === tab),
-    [visibleBuffer, tab],
-  );
+  }, [filtered]);
 
   const aggregated = useMemo(
     () => aggregateEvents(filtered, agentMap, MAX_DISPLAY, freshIds),
