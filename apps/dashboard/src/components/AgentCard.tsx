@@ -8,10 +8,10 @@
 
 import Link from "next/link";
 import type { Agent } from "@openclaw-mc/shared";
+import { ClientTime } from "@/components/ClientTime";
 import {
   durationHuman,
   isOnlineStatus,
-  relativeTime,
   statusColors,
 } from "@/lib/format";
 import {
@@ -106,7 +106,7 @@ export function AgentCard({ agent, livePulse }: AgentCardProps) {
         <Metric
           icon={<HeartbeatIcon className="h-3.5 w-3.5" />}
           label="Last beat"
-          value={<span className="text-ink-200">{relativeTime(agent.lastHeartbeat)}</span>}
+          value={<span className="text-ink-200"><ClientTime iso={agent.lastHeartbeat} /></span>}
         />
         <Metric
           label="Task"

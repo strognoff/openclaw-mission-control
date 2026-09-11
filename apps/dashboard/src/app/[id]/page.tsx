@@ -14,9 +14,9 @@ import type { Metadata } from "next";
 import { getAgent, liveStreamUrl } from "@/lib/api.server";
 import {
   durationHuman,
-  relativeTime,
   statusColors,
 } from "@/lib/format";
+import { ClientTime } from "@/components/ClientTime";
 import { LiveStreamProvider } from "@/components/LiveStreamProvider";
 import { LiveAgentHero } from "@/components/LiveAgentHero";
 import { LiveActivityFeed } from "@/components/LiveActivityFeed";
@@ -100,7 +100,7 @@ export default async function AgentDetailPage({
                       </span>
                     </div>
                     <div className="flex flex-wrap items-center gap-4 text-xs text-ink-400">
-                      <span>started {relativeTime(run.startedAt)}</span>
+                      <span>started <ClientTime iso={run.startedAt} /></span>
                       <span>{durationHuman(run.durationMs)}</span>
                       <span>{run.toolCallCount} tool calls</span>
                     </div>

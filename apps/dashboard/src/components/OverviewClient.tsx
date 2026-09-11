@@ -13,8 +13,8 @@ import type { Agent } from "@openclaw-mc/shared";
 import {
   bucketEventsToday,
   isOnlineStatus,
-  relativeTime,
 } from "@/lib/format";
+import { ClientTime } from "@/components/ClientTime";
 import { AgentCard } from "@/components/AgentCard";
 import { SummaryTiles } from "@/components/SummaryTiles";
 import { LiveActivityFeed } from "@/components/LiveActivityFeed";
@@ -45,10 +45,6 @@ export function HeroStrip() {
     () => computeStats(agents),
     [agents],
   );
-
-  const liveLabel = lastMessageAt
-    ? relativeTime(new Date(lastMessageAt).toISOString())
-    : "—";
 
   return (
     <section className="mc-card overflow-hidden">
@@ -89,7 +85,13 @@ export function HeroStrip() {
           </div>
           <div className="text-xs text-ink-500">
             <span className="hidden sm:inline">last update </span>
-            <span className="font-mono text-ink-300">{liveLabel}</span>
+            <span className="font-mono text-ink-300">
+              {lastMessageAt ? (
+                <ClientTime iso={new Date(lastMessageAt).toISOString()} />
+              ) : (
+                "—"
+              )}
+            </span>
           </div>
         </div>
       </div>
@@ -107,9 +109,18 @@ export function SummarySection() {
     [agents],
   );
 
+  // bucketEventsToday calls Date.now()/new Date() in pure functions — running
+  // it during render produces mismatched SSR vs client output (server time
+  // vs browser time). Defer until after hydration via a `hydrated` flag.
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
+
   const todays = useMemo(
-    () => events.filter((e) => bucketEventsToday.isToday(e.timestamp)),
-    [events],
+    () =>
+      hydrated
+        ? events.filter((e) => bucketEventsToday.isToday(e.timestamp))
+        : [],
+    [events, hydrated],
   );
   const tasksToday = useMemo(
     () =>
@@ -133,19 +144,25 @@ export function SummarySection() {
     [todays],
   );
   const hourlyBuckets = useMemo(
-    () => bucketEventsToday.hourly(todays, 12),
-    [todays],
+    () =>
+      hydrated
+        ? bucketEventsToday.hourly(todays, 12)
+        : new Array(12).fill(0),
+    [todays, hydrated],
   );
-
-  const liveLabel = lastMessageAt
-    ? relativeTime(new Date(lastMessageAt).toISOString())
-    : "—";
 
   return (
     <section>
       <div className="mb-3 flex items-end justify-between">
         <h3 className="mc-section-title">Overview</h3>
-        <p className="text-[11px] text-ink-600">Updated {liveLabel}</p>
+        <p className="text-[11px] text-ink-600">
+          Updated{" "}
+          {lastMessageAt ? (
+            <ClientTime iso={new Date(lastMessageAt).toISOString()} />
+          ) : (
+            "—"
+          )}
+        </p>
       </div>
       <SummaryTiles
         online={online}

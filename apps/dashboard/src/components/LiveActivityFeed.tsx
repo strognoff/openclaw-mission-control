@@ -26,10 +26,10 @@ import type {
 } from "@openclaw-mc/shared";
 import {
   eventDot,
-  shortTime,
   statusColors,
   summarizeEvent,
 } from "@/lib/format";
+import { ClientShortTime } from "@/components/ClientTime";
 import {
   ActivityIcon,
   HeartbeatIcon,
@@ -458,8 +458,8 @@ export function LiveActivityFeed({ maxBuffer: _maxBuffer = 500 }: Props = {}) {
                     ) : null}
                     {entry.count > 1 ? (
                       <span className="font-mono text-[10px] text-ink-600">
-                        {shortTime(entry.firstTimestamp)} →{" "}
-                        {shortTime(entry.lastTimestamp)}
+                        <ClientShortTime iso={entry.firstTimestamp} /> →{" "}
+                        <ClientShortTime iso={entry.lastTimestamp} />
                       </span>
                     ) : null}
                   </div>
@@ -469,7 +469,7 @@ export function LiveActivityFeed({ maxBuffer: _maxBuffer = 500 }: Props = {}) {
                 </div>
 
                 <span className="shrink-0 font-mono text-[11px] text-ink-500">
-                  {shortTime(entry.lastTimestamp)}
+                  <ClientShortTime iso={entry.lastTimestamp} />
                 </span>
               </li>
             );

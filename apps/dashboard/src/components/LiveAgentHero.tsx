@@ -13,10 +13,10 @@
  */
 
 import type { Agent } from "@openclaw-mc/shared";
+import { ClientTime } from "@/components/ClientTime";
 import {
   durationHuman,
   isOnlineStatus,
-  relativeTime,
   statusColors,
 } from "@/lib/format";
 import { useAgent } from "@/components/LiveStreamProvider";
@@ -81,7 +81,7 @@ export function LiveAgentHero({ initialAgent, lastRun }: Props) {
         <Field label="OpenClaw" value={live.openclawVersion} />
         <Field
           label="Last heartbeat"
-          value={relativeTime(live.lastHeartbeat)}
+          value={<ClientTime iso={live.lastHeartbeat} />}
         />
         {lastRun ? (
           <>
@@ -97,11 +97,11 @@ export function LiveAgentHero({ initialAgent, lastRun }: Props) {
             {lastRun.errorSummary ? (
               <Field label="Last error" value={lastRun.errorSummary} />
             ) : (
-              <Field label="Last seen" value={relativeTime(live.lastSeen)} />
+              <Field label="Last seen" value={<ClientTime iso={live.lastSeen} />} />
             )}
           </>
         ) : (
-          <Field label="Last seen" value={relativeTime(live.lastSeen)} />
+          <Field label="Last seen" value={<ClientTime iso={live.lastSeen} />} />
         )}
       </dl>
     </header>
@@ -114,7 +114,7 @@ function Field({
   mono,
 }: {
   label: string;
-  value: string;
+  value: React.ReactNode;
   mono?: boolean;
 }) {
   return (
