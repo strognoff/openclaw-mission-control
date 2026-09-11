@@ -3,9 +3,14 @@
 /**
  * Client component for the Keys page — handles mint/revoke with the
  * plaintext returned only at mint time.
+ *
+ * Revoked keys are collapsed behind a `<details>` element by default so
+ * the table stays focused on what's actually deployed. The collapse state
+ * is persisted to localStorage, matching the offline-collapsed pattern in
+ * the Agents section on the overview page.
  */
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { mintKey, revokeKey } from "@/lib/api.client";
 
@@ -30,6 +35,34 @@ export function KeysManager({ initialKeys }: { initialKeys: KeyRow[] }) {
     apiKey: string;
     label: string | null;
   } | null>(null);
+
+  // Collapse state for the revoked-keys section — persisted to localStorage.
+  // SSR-safe: defaults to collapsed, then updates on mount (brief flash only).
+  const [showRevoked, setShowRevoked] = useState(false);
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("mc:show-revoked");
+      if (stored === "true") setShowRevoked(true);
+    } catch {
+      /* localStorage unavailable */
+    }
+  }, []);
+
+  // Split keys into active + revoked. Active keys keep their existing order
+  // (server returns newest-first); revoked keys are also newest-first by
+  // revokedAt so the most recently revoked shows at the top of the panel.
+  const { activeKeys, revokedKeys } = useMemo(() => {
+    const active: KeyRow[] = [];
+    const revoked: KeyRow[] = [];
+    for (const k of initialKeys) {
+      if (k.revokedAt) revoked.push(k);
+      else active.push(k);
+    }
+    revoked.sort((a, b) =>
+      (b.revokedAt ?? "").localeCompare(a.revokedAt ?? ""),
+    );
+    return { activeKeys: active, revokedKeys: revoked };
+  }, [initialKeys]);
 
   async function handleMint(e: React.FormEvent) {
     e.preventDefault();
@@ -148,12 +181,12 @@ export function KeysManager({ initialKeys }: { initialKeys: KeyRow[] }) {
 
       {/* Mobile cards (below sm) */}
       <div className="space-y-3 sm:hidden">
-        {initialKeys.length === 0 ? (
+        {activeKeys.length === 0 && revokedKeys.length === 0 ? (
           <div className="mc-card px-4 py-8 text-center text-sm text-ink-500">
             No keys minted yet.
           </div>
         ) : (
-          initialKeys.map((k) => (
+          activeKeys.map((k) => (
             <div key={k.id} className="mc-card space-y-3 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
@@ -167,15 +200,9 @@ export function KeysManager({ initialKeys }: { initialKeys: KeyRow[] }) {
                   ) : null}
                 </div>
                 <div>
-                  {k.revokedAt ? (
-                    <span className="mc-pill bg-rose-500/10 text-rose-200 ring-rose-500/30">
-                      revoked
-                    </span>
-                  ) : (
-                    <span className="mc-pill bg-emerald-500/10 text-emerald-200 ring-emerald-500/30">
-                      active
-                    </span>
-                  )}
+                  <span className="mc-pill bg-emerald-500/10 text-emerald-200 ring-emerald-500/30">
+                    active
+                  </span>
                 </div>
               </div>
               <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
@@ -198,19 +225,82 @@ export function KeysManager({ initialKeys }: { initialKeys: KeyRow[] }) {
                   </dd>
                 </div>
               </dl>
-              {!k.revokedAt ? (
-                <button
-                  type="button"
-                  onClick={() => handleRevoke(k.id)}
-                  className="mc-button w-full text-rose-200 hover:bg-rose-500/10"
-                >
-                  Revoke
-                </button>
-              ) : null}
+              <button
+                type="button"
+                onClick={() => handleRevoke(k.id)}
+                className="mc-button w-full text-rose-200 hover:bg-rose-500/10"
+              >
+                Revoke
+              </button>
             </div>
           ))
         )}
       </div>
+
+      {/* Mobile — revoked keys (collapsed by default) */}
+      {revokedKeys.length > 0 ? (
+        <details
+          className="group overflow-hidden rounded-xl border border-ink-800/80 bg-ink-950/40 sm:hidden"
+          open={showRevoked}
+          onToggle={(e) => {
+            const isOpen = (e.target as HTMLDetailsElement).open;
+            setShowRevoked(isOpen);
+            try {
+              localStorage.setItem("mc:show-revoked", String(isOpen));
+            } catch {
+              /* localStorage unavailable */
+            }
+          }}
+        >
+          <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-3 transition-colors hover:bg-ink-800/40 [&::-webkit-details-marker]:hidden">
+            <div className="flex items-center gap-3">
+              <span className="mc-pill bg-rose-500/10 text-rose-200 ring-rose-500/30">
+                revoked
+              </span>
+              <span className="text-sm font-medium text-ink-200">
+                {revokedKeys.length} revoked key
+                {revokedKeys.length === 1 ? "" : "s"}
+              </span>
+            </div>
+            <span className="text-xs text-ink-500 transition-transform group-open:rotate-180">
+              ▾
+            </span>
+          </summary>
+          <div className="space-y-3 border-t border-ink-800 p-3">
+            {revokedKeys.map((k) => (
+              <div key={k.id} className="mc-card space-y-3 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-mono text-xs text-ink-200">
+                      {k.agentId}
+                    </div>
+                    {k.label ? (
+                      <div className="mt-0.5 truncate text-xs text-ink-500">
+                        {k.label}
+                      </div>
+                    ) : null}
+                  </div>
+                  <span className="mc-pill bg-rose-500/10 text-rose-200 ring-rose-500/30">
+                    revoked
+                  </span>
+                </div>
+                <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                  <div>
+                    <dt className="text-ink-500">Prefix</dt>
+                    <dd className="font-mono text-ink-300">{k.keyPrefix}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-ink-500">Revoked</dt>
+                    <dd className="text-ink-300">
+                      {new Date(k.revokedAt!).toLocaleString()}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : null}
 
       {/* Desktop table (sm and up) */}
       <div className="mc-card hidden overflow-hidden sm:block">
@@ -222,22 +312,33 @@ export function KeysManager({ initialKeys }: { initialKeys: KeyRow[] }) {
               <th className="px-4 py-3 text-left">Prefix</th>
               <th className="px-4 py-3 text-left">Created</th>
               <th className="px-4 py-3 text-left">Last used</th>
-              <th className="px-4 py-3 text-left">Status</th>
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-ink-800">
-            {initialKeys.length === 0 ? (
+            {activeKeys.length === 0 && revokedKeys.length === 0 ? (
               <tr>
                 <td
-                  colSpan={7}
+                  colSpan={6}
                   className="px-4 py-8 text-center text-ink-500"
                 >
                   No keys minted yet.
                 </td>
               </tr>
+            ) : activeKeys.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={6}
+                  className="px-4 py-6 text-center text-sm text-ink-500"
+                >
+                  No active keys.{" "}
+                  {revokedKeys.length > 0
+                    ? `${revokedKeys.length} revoked key${revokedKeys.length === 1 ? "" : "s"} below.`
+                    : ""}
+                </td>
+              </tr>
             ) : (
-              initialKeys.map((k) => (
+              activeKeys.map((k) => (
                 <tr key={k.id} className="text-ink-200">
                   <td className="px-4 py-3 font-mono text-xs">{k.agentId}</td>
                   <td className="px-4 py-3 text-xs">{k.label ?? "—"}</td>
@@ -250,29 +351,14 @@ export function KeysManager({ initialKeys }: { initialKeys: KeyRow[] }) {
                       ? new Date(k.lastUsedAt).toLocaleString()
                       : "—"}
                   </td>
-                  <td className="px-4 py-3 text-xs">
-                    {k.revokedAt ? (
-                      <span className="mc-pill bg-rose-500/10 text-rose-200 ring-rose-500/30">
-                        revoked
-                      </span>
-                    ) : (
-                      <span className="mc-pill bg-emerald-500/10 text-emerald-200 ring-emerald-500/30">
-                        active
-                      </span>
-                    )}
-                  </td>
                   <td className="px-4 py-3 text-right">
-                    {!k.revokedAt ? (
-                      <button
-                        type="button"
-                        onClick={() => handleRevoke(k.id)}
-                        className="mc-button text-rose-200 hover:bg-rose-500/10"
-                      >
-                        Revoke
-                      </button>
-                    ) : (
-                      <span className="text-xs text-ink-500">—</span>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleRevoke(k.id)}
+                      className="mc-button text-rose-200 hover:bg-rose-500/10"
+                    >
+                      Revoke
+                    </button>
                   </td>
                 </tr>
               ))
@@ -280,6 +366,62 @@ export function KeysManager({ initialKeys }: { initialKeys: KeyRow[] }) {
           </tbody>
         </table>
       </div>
+
+      {/* Desktop — revoked keys (collapsed by default) */}
+      {revokedKeys.length > 0 ? (
+        <details
+          className="group overflow-hidden rounded-xl border border-ink-800/80 bg-ink-950/40 hidden sm:block"
+          open={showRevoked}
+          onToggle={(e) => {
+            const isOpen = (e.target as HTMLDetailsElement).open;
+            setShowRevoked(isOpen);
+            try {
+              localStorage.setItem("mc:show-revoked", String(isOpen));
+            } catch {
+              /* localStorage unavailable */
+            }
+          }}
+        >
+          <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-3 transition-colors hover:bg-ink-800/40 [&::-webkit-details-marker]:hidden">
+            <div className="flex items-center gap-3">
+              <span className="mc-pill bg-rose-500/10 text-rose-200 ring-rose-500/30">
+                revoked
+              </span>
+              <span className="text-sm font-medium text-ink-200">
+                {revokedKeys.length} revoked key
+                {revokedKeys.length === 1 ? "" : "s"}
+              </span>
+            </div>
+            <span className="text-xs text-ink-500 transition-transform group-open:rotate-180">
+              ▾
+            </span>
+          </summary>
+          <div className="border-t border-ink-800">
+            <table className="w-full text-sm">
+              <thead className="bg-ink-950/60 text-xs uppercase tracking-wider text-ink-400">
+                <tr>
+                  <th className="px-4 py-3 text-left">Agent</th>
+                  <th className="px-4 py-3 text-left">Label</th>
+                  <th className="px-4 py-3 text-left">Prefix</th>
+                  <th className="px-4 py-3 text-left">Revoked</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-ink-800">
+                {revokedKeys.map((k) => (
+                  <tr key={k.id} className="text-ink-300">
+                    <td className="px-4 py-3 font-mono text-xs">{k.agentId}</td>
+                    <td className="px-4 py-3 text-xs">{k.label ?? "—"}</td>
+                    <td className="px-4 py-3 font-mono text-xs">{k.keyPrefix}</td>
+                    <td className="px-4 py-3 text-xs text-ink-400">
+                      {new Date(k.revokedAt!).toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      ) : null}
     </div>
   );
 }
