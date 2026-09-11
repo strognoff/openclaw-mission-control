@@ -1,30 +1,41 @@
 "use client";
 
 /**
- * OfficeView — pixel-art virtual office with framer-motion animations.
+ * OfficeView — first cut of the virtual AI office visualisation.
  *
- * Renders the live agent roster as pixel sprite characters at desks inside
- * a stylised office scene. Each agent's status drives the sprite's animation
- * and visual treatment; new message_sent events spawn brief flying-task
- * indicators above the sender's desk.
+ * Renders the live agent roster as sprites sitting at desks inside a
+ * stylised office scene. Each agent's current status (online/working,
+   idle, offline) drives its sprite colour and a small task indicator
+   ("…" thinking, tool dot, status pill).
  *
  * Data sources:
  *   - useAgents() (LiveStreamProvider) for live currentStatus
- *   - useEvents() to detect message_sent for flying-task spawns
  *
- * Inspired by https://github.com/wickedapp/openclaw-office (MIT). Sprites
- * vendored from upstream public/sprites/agent-*-v2.png; framer-motion 11
- * (the upstream uses 12, which is React 19 only — we pin to ^11.18.0 for
- * React 18 compat).
+ * Scope of THIS cut:
+ *   - Self-contained SVG / Tailwind scene — no external image assets.
+ *   - Agents placed at deterministic desk positions (no drag/drop yet).
+ *   - CSS transitions on colour when status changes.
+ *   - Falls back to "Add a workspace" CTA when no agents are registered.
+ *
+ * NOT in this cut (would require additional infrastructure):
+ *   - Flying task / request-pipeline animations (from
+ *     wickedapp/openclaw-office's IsometricOffice.js) — those depend on
+ *     the openclaw-office-notify-plugin to push workflow events, and on
+ *     framer-motion. We don't have the plugin wired up here; once a
+ *     workflow-event stream lands, swap this component for one that
+ *     animates flight paths between desks.
+ *   - AI-generated office scenes (Gemini), desk auto-detection (Claude
+ *     Vision), cost dashboard, security dashboard — out of scope for the
+ *     overview tab.
+ *
+ * Inspired by https://github.com/wickedapp/openclaw-office (MIT).
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
-import Image from "next/image";
-import { motion, AnimatePresence } from "framer-motion";
 import type { Agent, AgentStatus } from "@openclaw-mc/shared";
 import { statusColors } from "@/lib/format";
-import { useAgents, useEvents } from "@/components/LiveStreamProvider";
+import { useAgents } from "@/components/LiveStreamProvider";
 
 interface Props {
   /** Click an agent to jump to their detail page. */
@@ -37,6 +48,9 @@ type PositionedAgent = Agent & { _x: number; _y: number };
  * Deterministic desk positions as % of the office viewport. Inspired by
  * the layout table in wickedapp/openclaw-office IsometricOffice.js but
  * linearised here for the flat (non-isometric) scene.
+ *
+ * Order matches the order agents appear in `useAgents()` — agents are
+ * re-positioned deterministically when the roster changes.
  */
 const DESK_POSITIONS: ReadonlyArray<{ x: number; y: number; row: number }> = [
   { x: 16, y: 38, row: 0 },
@@ -50,113 +64,66 @@ const DESK_POSITIONS: ReadonlyArray<{ x: number; y: number; row: number }> = [
   { x: 72, y: 70, row: 1 },
 ];
 
-const SPRITE_VARIANTS = [
-  "agent-py-v2.webp",
-  "agent-quill-v2.webp",
-  "agent-savy-v2.webp",
-  "agent-vigil-v2.webp",
-  "agent-wickedman-v2.webp",
-] as const;
-
-function spriteFor(agentId: string): string {
-  let hash = 0;
-  for (let i = 0; i < agentId.length; i++) {
-    hash = (hash * 31 + agentId.charCodeAt(i)) >>> 0;
-  }
-  return SPRITE_VARIANTS[hash % SPRITE_VARIANTS.length];
-}
-
-const STATUS_OVERLAY: Record<AgentStatus, string> = {
-  IDLE: "",
-  WORKING: "brightness-110",
-  THINKING: "hue-rotate-15",
-  TOOL: "brightness-125 saturate-150",
-  WAITING: "brightness-90",
-  COMPLETE: "hue-rotate-90 saturate-150",
-  ERROR: "hue-rotate-180 saturate-200",
-  OFFLINE: "grayscale opacity-60",
-};
-
-// Per-status framer-motion animation configs. Each one runs on a loop
-// appropriate to the status (idle bob, working vibration, etc.).
-//
-// The `repeatType` literal union is required by framer-motion's Transition
-// type — using a generic `string` widens "mirror" to string and breaks
-// the assignability to motion.div's animate prop.
-const STATUS_ANIMATION: Record<
+const STATUS_SPRITE: Record<
   AgentStatus,
-  {
-    y?: number[];
-    x?: number[];
-    rotate?: number[];
-    scale?: number[];
-    opacity?: number;
-    transition: {
-      duration: number;
-      repeat: number;
-      ease?: "linear" | "easeIn" | "easeOut" | "easeInOut";
-      repeatType?: "reverse" | "mirror" | "loop";
-    };
-  }
+  { ringClass: string; bodyClass: string; label: string }
 > = {
   IDLE: {
-    y: [0, -2, 0],
-    transition: { duration: 3.2, repeat: Infinity, ease: "easeInOut" },
+    ringClass: "bg-emerald-400/70",
+    bodyClass: "bg-emerald-300",
+    label: "idle",
   },
   WORKING: {
-    y: [0, -1, 0, -1, 0],
-    transition: { duration: 0.4, repeat: Infinity },
+    ringClass: "bg-amber-400/70",
+    bodyClass: "bg-amber-300",
+    label: "working",
   },
   THINKING: {
-    rotate: [0, -4, 4, 0],
-    transition: { duration: 2.2, repeat: Infinity },
+    ringClass: "bg-sky-400/70",
+    bodyClass: "bg-sky-300",
+    label: "thinking",
   },
   TOOL: {
-    scale: [1, 1.06, 1],
-    transition: { duration: 1.4, repeat: Infinity },
+    ringClass: "bg-indigo-400/70",
+    bodyClass: "bg-indigo-300",
+    label: "tool",
   },
   WAITING: {
-    rotate: [0, 360],
-    transition: { duration: 4, repeat: Infinity, ease: "linear" },
+    ringClass: "bg-fuchsia-400/70",
+    bodyClass: "bg-fuchsia-300",
+    label: "waiting",
   },
   COMPLETE: {
-    scale: [1, 1.2, 1],
-    transition: { duration: 0.6, repeat: 1 },
+    ringClass: "bg-emerald-400/70",
+    bodyClass: "bg-emerald-300",
+    label: "complete",
   },
   ERROR: {
-    x: [-2, 2, -2],
-    transition: { duration: 0.2, repeat: Infinity, repeatType: "mirror" },
+    ringClass: "bg-rose-400/70",
+    bodyClass: "bg-rose-300",
+    label: "error",
   },
   OFFLINE: {
-    opacity: 0.5,
-    transition: { duration: 1, repeat: 0 },
+    ringClass: "bg-ink-700/70",
+    bodyClass: "bg-ink-600",
+    label: "offline",
   },
 };
 
-const STATUS_EMOJI: Record<AgentStatus, string> = {
-  IDLE: "💤",
-  WORKING: "⚡",
-  THINKING: "💭",
-  TOOL: "🔧",
-  WAITING: "⏳",
-  COMPLETE: "✅",
-  ERROR: "❗",
-  OFFLINE: "💀",
-};
+function avatarLetter(name: string): string {
+  const m = name.trim().match(/[a-zA-Z0-9]/);
+  return ((m?.[0] ?? "?") as string).toUpperCase();
+}
 
 function Desk({ agent, hrefBase }: { agent: PositionedAgent; hrefBase: string }) {
+  const sprite = STATUS_SPRITE[agent.currentStatus] ?? STATUS_SPRITE.OFFLINE;
   const offline = agent.currentStatus === "OFFLINE";
-  const sprite = spriteFor(agent.id);
-  const overlay = STATUS_OVERLAY[agent.currentStatus];
-  const anim = STATUS_ANIMATION[agent.currentStatus];
-  const emoji = STATUS_EMOJI[agent.currentStatus];
-  const pill = statusColors(agent.currentStatus);
   return (
     <Link
       href={`${hrefBase}/${agent.id}`}
-      className="group absolute -translate-x-1/2 -translate-y-1/2 focus:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400/60"
+      className="group absolute -translate-x-1/2 -translate-y-1/2 transition-transform duration-300 hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400/60"
       style={{ left: `${agent._x}%`, top: `${agent._y}%` }}
-      aria-label={`${agent.name} — ${agent.currentStatus.toLowerCase()}`}
+      aria-label={`${agent.name} — ${sprite.label}`}
     >
       {/* Desk surface */}
       <div
@@ -176,75 +143,34 @@ function Desk({ agent, hrefBase }: { agent: PositionedAgent; hrefBase: string })
             }`}
           />
         </div>
-        {/* Pixel sprite above the desk (with framer-motion status animation) */}
-        <motion.div
-          className="absolute left-1/2 -top-12 -translate-x-1/2"
-          animate={anim}
-          whileHover={{ scale: 1.15 }}
-        >
-          <div className="relative h-12 w-12">
-            <Image
-              src={`/sprites/office/${sprite}`}
-              alt={agent.name}
-              width={48}
-              height={48}
-              className={`pixel-art h-full w-full ${overlay}`}
-              unoptimized
-              priority={false}
+        {/* Sprite head poking above the desk */}
+        <div className="absolute left-1/2 -top-7 -translate-x-1/2">
+          <div className="relative">
+            <div
+              className={`absolute inset-0 -m-1 rounded-full ${sprite.ringClass} blur-sm transition-colors duration-500`}
+              aria-hidden
             />
-            {/* Status emoji floating above the sprite */}
-            <span className="absolute -top-2 left-1/2 -translate-x-1/2 text-sm drop-shadow-md">
-              {emoji}
-            </span>
+            <div
+              className={`relative flex h-9 w-9 items-center justify-center rounded-full ${sprite.bodyClass} text-xs font-bold text-ink-950 ring-2 ring-ink-950/40 shadow-md transition-colors duration-500`}
+            >
+              {avatarLetter(agent.name)}
+            </div>
           </div>
-        </motion.div>
+        </div>
         {/* Name tag below desk */}
         <div className="pointer-events-none absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-ink-950/85 px-1.5 py-0.5 font-mono text-[10px] text-ink-200 ring-1 ring-white/10 shadow-sm">
           {agent.name.length > 14 ? `${agent.name.slice(0, 13)}…` : agent.name}
         </div>
         {/* Status pill on hover */}
         <div
-          className={`pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full px-2 py-0.5 text-[9px] font-medium uppercase tracking-wider opacity-0 ring-1 ring-white/10 transition-opacity duration-200 group-hover:opacity-100 ${pill.bg} ${pill.text}`}
+          className={`pointer-events-none absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full px-2 py-0.5 text-[9px] font-medium uppercase tracking-wider opacity-0 ring-1 ring-white/10 transition-opacity duration-200 group-hover:opacity-100 ${
+            statusColors(agent.currentStatus).bg
+          } ${statusColors(agent.currentStatus).text}`}
         >
-          {agent.currentStatus.toLowerCase()}
+          {sprite.label}
         </div>
       </div>
     </Link>
-  );
-}
-
-interface FlyingTask {
-  id: string;
-  x: number;
-  y: number;
-}
-
-function FlyingTasks({
-  tasks,
-  onExpire,
-}: {
-  tasks: FlyingTask[];
-  onExpire: (id: string) => void;
-}) {
-  return (
-    <AnimatePresence>
-      {tasks.map((task) => (
-        <motion.div
-          key={task.id}
-          className="pointer-events-none absolute z-40"
-          style={{ left: `${task.x}%`, top: `${task.y}%` }}
-          initial={{ opacity: 0, y: 0, scale: 0.6 }}
-          animate={{ opacity: [0, 1, 1, 0], y: -50, scale: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 1.6, times: [0, 0.2, 0.8, 1] }}
-          onAnimationComplete={() => onExpire(task.id)}
-        >
-          <div className="rounded-md bg-cyan-400/95 px-2 py-0.5 text-[10px] font-bold text-ink-950 shadow-lg ring-1 ring-cyan-200">
-            ✉️ sent
-          </div>
-        </motion.div>
-      ))}
-    </AnimatePresence>
   );
 }
 
@@ -265,8 +191,6 @@ function EmptyOffice() {
 
 export function OfficeView({ hrefBase = "" }: Props = {}) {
   const allAgents = useAgents();
-  const events = useEvents();
-  const [activeTasks, setActiveTasks] = useState<FlyingTask[]>([]);
 
   // Sort: online before offline (stable inside each group), then name.
   // Assign desk positions based on that.
@@ -284,25 +208,6 @@ export function OfficeView({ hrefBase = "" }: Props = {}) {
     }));
   }, [allAgents]);
 
-  // Spawn a brief flying-task indicator whenever a fresh message_sent
-  // event arrives for one of our agents.
-  useEffect(() => {
-    if (events.length === 0) return;
-    const latest = events[0];
-    if (!latest || latest.type !== "message_sent") return;
-    const agent = positioned.find((a) => a.id === latest.agentId);
-    if (!agent) return;
-    const id = `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    setActiveTasks((prev) => [
-      ...prev.slice(-3),
-      { id, x: agent._x, y: agent._y },
-    ]);
-  }, [events, positioned]);
-
-  const handleExpire = (id: string) => {
-    setActiveTasks((prev) => prev.filter((t) => t.id !== id));
-  };
-
   if (allAgents.length === 0) {
     return (
       <div className="mc-card overflow-hidden">
@@ -319,7 +224,7 @@ export function OfficeView({ hrefBase = "" }: Props = {}) {
         role="img"
         aria-label={`Virtual office with ${positioned.length} agents at their desks`}
       >
-        {/* Floor + back wall + city-lights window strip */}
+        {/* Floor + grid lines */}
         <svg
           viewBox="0 0 1600 900"
           preserveAspectRatio="xMidYMid slice"
@@ -373,7 +278,7 @@ export function OfficeView({ hrefBase = "" }: Props = {}) {
           ))}
           {/* City lights in the strip */}
           {Array.from({ length: 36 }).map((_, i) => {
-            const cx = 160 + ((i * 37) % 1280);
+            const cx = 160 + (i * 37) % 1280;
             const cy = 100 + ((i * 17) % 110);
             const r = 1 + ((i * 13) % 3);
             const opacity = 0.2 + ((i * 7) % 6) / 10;
@@ -432,17 +337,14 @@ export function OfficeView({ hrefBase = "" }: Props = {}) {
             fontFamily="monospace"
             fontSize="12"
           >
-            {positioned.length} agent{positioned.length === 1 ? "" : "s"} on shift
+            {positioned.length} desk{positioned.length === 1 ? "" : "s"} occupied
           </text>
         </svg>
 
-        {/* Pixel-art agents at desks */}
+        {/* Agents overlaid via absolutely positioned Links */}
         {positioned.map((agent) => (
           <Desk key={agent.id} agent={agent} hrefBase={hrefBase} />
         ))}
-
-        {/* Flying tasks (transient) */}
-        <FlyingTasks tasks={activeTasks} onExpire={handleExpire} />
       </div>
 
       {/* Footer: legend */}
@@ -451,26 +353,32 @@ export function OfficeView({ hrefBase = "" }: Props = {}) {
           <span>Legend:</span>
           {(
             [
-              ["IDLE", "💤"],
-              ["WORKING", "⚡"],
-              ["THINKING", "💭"],
-              ["TOOL", "🔧"],
-              ["WAITING", "⏳"],
-              ["COMPLETE", "✅"],
-              ["ERROR", "❗"],
-              ["OFFLINE", "💀"],
+              ["IDLE", "idle"],
+              ["WORKING", "working"],
+              ["THINKING", "thinking"],
+              ["TOOL", "tool"],
+              ["WAITING", "waiting"],
+              ["COMPLETE", "complete"],
+              ["ERROR", "error"],
+              ["OFFLINE", "offline"],
             ] as Array<[AgentStatus, string]>
-          ).map(([status, emoji]) => (
-            <span key={status} className="inline-flex items-center gap-1.5">
-              <span aria-hidden>{emoji}</span>
-              <span className="font-mono text-[10px] uppercase tracking-wider text-ink-400">
-                {status.toLowerCase()}
+          ).map(([status, label]) => {
+            const sprite = STATUS_SPRITE[status];
+            return (
+              <span key={status} className="inline-flex items-center gap-1.5">
+                <span
+                  className={`h-2 w-2 rounded-full ${sprite.bodyClass}`}
+                  aria-hidden
+                />
+                <span className="font-mono text-[10px] uppercase tracking-wider text-ink-400">
+                  {label}
+                </span>
               </span>
-            </span>
-          ))}
+            );
+          })}
         </div>
         <p className="text-[11px] text-ink-600">
-          Sprites from{" "}
+          Inspired by{" "}
           <a
             href="https://github.com/wickedapp/openclaw-office"
             className="text-ink-400 underline decoration-dotted underline-offset-2 hover:text-ink-200"
@@ -479,7 +387,7 @@ export function OfficeView({ hrefBase = "" }: Props = {}) {
           >
             openclaw-office
           </a>
-          . Animations: framer-motion 11.
+          . Full live animations need the upstream notify plugin.
         </p>
       </div>
     </div>
