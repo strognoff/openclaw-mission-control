@@ -189,7 +189,7 @@ function EmptyOffice() {
   );
 }
 
-export function OfficeView({ hrefBase = "/agents" }: Props = {}) {
+export function OfficeView({ hrefBase = "" }: Props = {}) {
   const allAgents = useAgents();
 
   // Sort: online before offline (stable inside each group), then name.
