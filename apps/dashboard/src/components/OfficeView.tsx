@@ -263,7 +263,7 @@ function EmptyOffice() {
   );
 }
 
-export function OfficeView({ hrefBase = "/agents" }: Props = {}) {
+export function OfficeView({ hrefBase = "" }: Props = {}) {
   const allAgents = useAgents();
   const events = useEvents();
   const [activeTasks, setActiveTasks] = useState<FlyingTask[]>([]);

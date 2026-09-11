@@ -312,7 +312,7 @@ export function AgentsSection() {
       </div>
 
       {/* Office view */}
-      {viewMode === "office" ? <OfficeView hrefBase="/agents" /> : null}
+      {viewMode === "office" ? <OfficeView /> : null}
 
       {/* Online agents (grid) */}
       {viewMode === "grid" && onlineAgents.length > 0 ? (
