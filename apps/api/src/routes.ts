@@ -345,12 +345,18 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
         parsed.data.activity !== current.currentActivity) ||
       (parsed.data.tool !== undefined && parsed.data.tool !== current.currentTool);
 
+    // If the heartbeat carries no status but the agent is currently OFFLINE,
+    // revive them to IDLE — they are clearly alive and reporting.
+    const reviveFromOffline =
+      parsed.data.status === undefined && current?.currentStatus === "OFFLINE";
+
     const updated = await prisma.agent.update({
       where: { id: id.agent.id },
       data: {
         lastHeartbeat: now,
         lastSeen: now,
-        ...(parsed.data.status !== undefined ? { currentStatus: parsed.data.status } : {}),
+        currentStatus:
+          parsed.data.status ?? (reviveFromOffline ? "IDLE" : current?.currentStatus),
         ...(parsed.data.task !== undefined ? { currentTask: parsed.data.task } : {}),
         ...(parsed.data.activity !== undefined ? { currentActivity: parsed.data.activity } : {}),
         ...(parsed.data.tool !== undefined ? { currentTool: parsed.data.tool } : {}),
