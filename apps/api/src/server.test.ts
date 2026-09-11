@@ -321,7 +321,11 @@ describe("heartbeats", () => {
     });
   });
 
-  it("updates lastHeartbeat without inserting an event row", async () => {
+  it("emits a heartbeat event for an idle agent when state doesn't change", async () => {
+    // Issue #4: without cadence emission, an idle agent's LAST BEAT advances
+    // but no event row is created, so the Live Activity feed stays empty.
+    // The first heartbeat after register has no prior event to throttle, so
+    // it must produce a row.
     const before = await app.app.inject({
       method: "GET",
       url: "/v1/agents/bot-hb",
@@ -341,10 +345,42 @@ describe("heartbeats", () => {
       url: "/v1/agents/bot-hb",
       headers: { authorization: `Bearer ${ADMIN_KEY}` },
     });
-    expect(after.json().events.length).toBe(beforeEvents); // no new event
+    expect(after.json().events.length).toBe(beforeEvents + 1);
+    expect(after.json().events[0].type).toBe("heartbeat");
     const hbBefore = Date.parse(before.json().agent.lastHeartbeat);
     const hbAfter = Date.parse(after.json().agent.lastHeartbeat);
     expect(hbAfter).toBeGreaterThanOrEqual(hbBefore);
+  });
+
+  it("throttles heartbeat events within the cadence window", async () => {
+    // MC_HEARTBEAT_EVENT_INTERVAL_MS defaults to 60_000. A second heartbeat
+    // fired immediately after the first must NOT create a new event row
+    // (the previous one is < 60s old and state didn't change).
+    await app.app.inject({
+      method: "POST",
+      url: "/v1/agents/heartbeat",
+      headers: { authorization: `Bearer ${agentKey}` },
+      payload: { status: "IDLE" },
+    });
+    const afterFirst = await app.app.inject({
+      method: "GET",
+      url: "/v1/agents/bot-hb",
+      headers: { authorization: `Bearer ${ADMIN_KEY}` },
+    });
+    const firstCount = afterFirst.json().events.length;
+
+    await app.app.inject({
+      method: "POST",
+      url: "/v1/agents/heartbeat",
+      headers: { authorization: `Bearer ${agentKey}` },
+      payload: { status: "IDLE" },
+    });
+    const afterSecond = await app.app.inject({
+      method: "GET",
+      url: "/v1/agents/bot-hb",
+      headers: { authorization: `Bearer ${ADMIN_KEY}` },
+    });
+    expect(afterSecond.json().events.length).toBe(firstCount); // throttled
   });
 
   it("inserts an event when the status changes meaningfully", async () => {

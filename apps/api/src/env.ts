@@ -28,6 +28,18 @@ const schema = z.object({
     .string()
     .default("/tmp/menuboard-agents-api.retention.lock"),
   MC_HEARTBEAT_INTERVAL_MS: z.coerce.number().int().min(100).max(600_000).default(30_000),
+  /**
+   * Cadence at which a heartbeat event row is emitted for an idle agent
+   * (one whose status/task/activity/tool did not change). Without this,
+   * the LAST BEAT card advances but the Live Activity feed stays empty
+   * (issue #4). Must be >= MC_HEARTBEAT_INTERVAL_MS.
+   */
+  MC_HEARTBEAT_EVENT_INTERVAL_MS: z.coerce
+    .number()
+    .int()
+    .min(100)
+    .max(3_600_000)
+    .default(60_000),
   MC_OFFLINE_AFTER_MS: z.coerce.number().int().min(100).max(3_600_000).default(90_000),
   MC_REAPER_INTERVAL_MS: z.coerce.number().int().min(50).max(600_000).default(10_000),
   MC_CORS_ORIGINS: z.string().default("*"),

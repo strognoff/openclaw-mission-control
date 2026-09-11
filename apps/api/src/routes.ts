@@ -310,6 +310,18 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
 
   /* ────────── Heartbeat ────────── */
 
+  /**
+   * Cadence at which we emit a heartbeat event for an idle (no meaningful
+   * state change) agent. The dashboard's LiveActivityFeed relies on these
+   * events to show "the agent is alive" — without them, the LAST BEAT card
+   * shows a recent timestamp while the feed stays empty (issue #4).
+   *
+   * Must be >= the plugin's heartbeat interval (default 30s); defaulting to
+   * 60s gives at most one heartbeat event per agent per minute. Read from
+   * env via MC_HEARTBEAT_EVENT_INTERVAL_MS so tests can shrink the window.
+   */
+  const heartbeatEventIntervalMs = env.MC_HEARTBEAT_EVENT_INTERVAL_MS;
+
   app.post("/v1/agents/heartbeat", async (req, reply) => {
     const id = await requireAgent(req, reply);
     if (!id) return;
@@ -346,7 +358,24 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
     });
     publishAgentUpdated(broker, updated);
 
-    if (meaningful) {
+    // Issue #4: also emit when the previous heartbeat event is older than
+    // heartbeatEventIntervalMs, so an idle agent still shows activity in
+    // the dashboard's Live Activity feed. Without this, the LAST BEAT card
+    // advances (every heartbeat updates lastHeartbeat) but the feed stays
+    // empty because no event row is ever inserted.
+    let emitCadence = false;
+    if (!meaningful) {
+      const lastHbEvent = await prisma.event.findFirst({
+        where: { agentId: id.agent.id, type: "heartbeat" },
+        orderBy: { timestamp: "desc" },
+        select: { timestamp: true },
+      });
+      emitCadence =
+        !lastHbEvent ||
+        now.getTime() - lastHbEvent.timestamp.getTime() >= heartbeatEventIntervalMs;
+    }
+
+    if (meaningful || emitCadence) {
       const ts = now;
       const row = await prisma.event.create({
         data: {
