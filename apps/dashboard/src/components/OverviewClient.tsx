@@ -18,12 +18,19 @@ import { ClientTime } from "@/components/ClientTime";
 import { AgentCard } from "@/components/AgentCard";
 import { SummaryTiles } from "@/components/SummaryTiles";
 import { LiveActivityFeed } from "@/components/LiveActivityFeed";
+import { OfficeView } from "@/components/OfficeView";
 import {
   useAgents,
   useEvents,
   useLiveStream,
 } from "@/components/LiveStreamProvider";
-import { OnlineIcon, OfflineIcon, ServerIcon } from "@/components/icons";
+import {
+  GridIcon,
+  OfficeIcon,
+  OnlineIcon,
+  OfflineIcon,
+  ServerIcon,
+} from "@/components/icons";
 
 const WORKING_STATUSES = ["WORKING", "THINKING", "TOOL", "WAITING"];
 
@@ -214,6 +221,20 @@ export function AgentsSection() {
     }
   }, []);
 
+  // View-mode toggle: "grid" (cards, current behaviour) vs "office"
+  // (isometric-inspired scene). Persisted to localStorage. Defaults to
+  // "grid" so existing users aren't surprised.
+  type ViewMode = "grid" | "office";
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("mc:agents-view");
+      if (stored === "office" || stored === "grid") setViewMode(stored);
+    } catch {
+      /* localStorage unavailable */
+    }
+  }, []);
+
   if (agents.length === 0) {
     return (
       <section>
@@ -230,14 +251,71 @@ export function AgentsSection() {
     <section>
       <div className="mb-3 flex items-end justify-between">
         <h3 className="mc-section-title">Agents</h3>
-        <p className="text-[11px] text-ink-600">
-          {agents.length} total · {onlineCount} online
-          {offlineCount > 0 ? ` · ${offlineCount} offline` : ""}
-        </p>
+        <div className="flex items-center gap-3">
+          <p className="text-[11px] text-ink-600">
+            {agents.length} total · {onlineCount} online
+            {offlineCount > 0 ? ` · ${offlineCount} offline` : ""}
+          </p>
+          <div
+            role="tablist"
+            aria-label="Agent view mode"
+            className="flex items-center gap-0.5 rounded-lg border border-ink-800 bg-ink-900/60 p-0.5"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={viewMode === "grid"}
+              aria-label="Grid view"
+              title="Grid view"
+              onClick={() => {
+                setViewMode("grid");
+                try {
+                  localStorage.setItem("mc:agents-view", "grid");
+                } catch {
+                  /* localStorage unavailable */
+                }
+              }}
+              className={`flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+                viewMode === "grid"
+                  ? "bg-ink-800 text-ink-100"
+                  : "text-ink-500 hover:text-ink-200"
+              }`}
+            >
+              <GridIcon className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Grid</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={viewMode === "office"}
+              aria-label="Office view"
+              title="Office view"
+              onClick={() => {
+                setViewMode("office");
+                try {
+                  localStorage.setItem("mc:agents-view", "office");
+                } catch {
+                  /* localStorage unavailable */
+                }
+              }}
+              className={`flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+                viewMode === "office"
+                  ? "bg-ink-800 text-ink-100"
+                  : "text-ink-500 hover:text-ink-200"
+              }`}
+            >
+              <OfficeIcon className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Office</span>
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Online agents — always visible */}
-      {onlineAgents.length > 0 ? (
+      {/* Office view */}
+      {viewMode === "office" ? <OfficeView hrefBase="/agents" /> : null}
+
+      {/* Online agents (grid) */}
+      {viewMode === "grid" && onlineAgents.length > 0 ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {onlineAgents.map((agent) => (
             <AgentCard key={agent.id} agent={agent} />
@@ -245,8 +323,8 @@ export function AgentsSection() {
         </div>
       ) : null}
 
-      {/* Offline agents — collapsed by default */}
-      {offlineAgents.length > 0 ? (
+      {/* Offline agents — collapsed by default (grid only) */}
+      {viewMode === "grid" && offlineAgents.length > 0 ? (
         <details
           className="group mt-4 overflow-hidden rounded-xl border border-ink-800/80 bg-ink-950/40"
           open={showOffline}

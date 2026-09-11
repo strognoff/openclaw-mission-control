@@ -255,3 +255,28 @@ export function Sparkline({
     </svg>
   );
 }
+
+export function GridIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <rect x="14" y="14" width="7" height="7" rx="1" />
+    </svg>
+  );
+}
+
+export function OfficeIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M3 21h18" />
+      <path d="M5 21V8l7-4 7 4v13" />
+      <path d="M9 21v-5h6v5" />
+      <rect x="9" y="9" width="2" height="2" />
+      <rect x="13" y="9" width="2" height="2" />
+      <rect x="9" y="13" width="2" height="2" />
+      <rect x="13" y="13" width="2" height="2" />
+    </svg>
+  );
+}
